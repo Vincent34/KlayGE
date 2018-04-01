@@ -36,44 +36,6 @@
 
 namespace KlayGE
 {
-	template OBBox_T<float>::OBBox_T() noexcept;
-	template OBBox_T<float>::OBBox_T(float3 const & center,
-		float3 const & x_axis, float3 const & y_axis, float3 const & z_axis,
-		float3 const & extent) noexcept;
-	template OBBox_T<float>::OBBox_T(float3 const & center,
-		Quaternion const & rotation,
-		float3 const & extent) noexcept;
-	template OBBox_T<float>::OBBox_T(float3&& center,
-		Quaternion&& rotation,
-		float3&& extent) noexcept;
-	template OBBox_T<float>::OBBox_T(OBBox const & rhs) noexcept;
-	template OBBox_T<float>::OBBox_T(OBBox&& rhs) noexcept;
-	template OBBox& OBBox_T<float>::operator+=(float3 const & rhs) noexcept;
-	template OBBox& OBBox_T<float>::operator-=(float3 const & rhs) noexcept;
-	template OBBox& OBBox_T<float>::operator*=(float rhs) noexcept;
-	template OBBox& OBBox_T<float>::operator/=(float rhs) noexcept;
-	template OBBox& OBBox_T<float>::operator=(OBBox const & rhs) noexcept;
-	template OBBox& OBBox_T<float>::operator=(OBBox&& rhs) noexcept;
-	template OBBox const OBBox_T<float>::operator+() const noexcept;
-	template OBBox const OBBox_T<float>::operator-() const noexcept;
-	template bool OBBox_T<float>::IsEmpty() const noexcept;
-	template bool OBBox_T<float>::VecInBound(float3 const & v) const noexcept;
-	template float OBBox_T<float>::MaxRadiusSq() const noexcept;
-	template float3 OBBox_T<float>::Axis(uint32_t index) const noexcept;
-	template bool OBBox_T<float>::Intersect(AABBox const & aabb) const noexcept;
-	template bool OBBox_T<float>::Intersect(OBBox const & obb) const noexcept;
-	template bool OBBox_T<float>::Intersect(Sphere const & sphere) const noexcept;
-	template bool OBBox_T<float>::Intersect(Frustum const & frustum) const noexcept;
-	template float3 OBBox_T<float>::Corner(uint32_t index) const noexcept;
-	template bool OBBox_T<float>::operator==(OBBox const & rhs) const noexcept;
-
-
-	template <typename T>
-	OBBox_T<T>::OBBox_T() noexcept
-		: extent_(0, 0, 0)
-	{
-	}
-
 	template <typename T>
 	OBBox_T<T>::OBBox_T(Vector_T<T, 3> const & center,
 		Vector_T<T, 3> const & x_axis, Vector_T<T, 3> const & y_axis, Vector_T<T, 3> const & z_axis,
@@ -81,22 +43,6 @@ namespace KlayGE
 		: center_(center), extent_(extent)
 	{
 		rotation_ = MathLib::to_quaternion(x_axis, y_axis, z_axis, 0);
-	}
-
-	template <typename T>
-	OBBox_T<T>::OBBox_T(Vector_T<T, 3> const & center,
-		Quaternion_T<T> const & rotation,
-		Vector_T<T, 3> const & extent) noexcept
-		: center_(center), rotation_(rotation), extent_(extent)
-	{
-	}
-
-	template <typename T>
-	OBBox_T<T>::OBBox_T(Vector_T<T, 3>&& center,
-		Quaternion_T<T>&& rotation,
-		Vector_T<T, 3>&& extent) noexcept
-		: center_(std::move(center)), rotation_(std::move(rotation)), extent_(std::move(extent))
-	{
 	}
 
 	template <typename T>
@@ -250,4 +196,7 @@ namespace KlayGE
 			&& (rotation_ == rhs.rotation_)
 			&& (extent_ == rhs.extent_);
 	}
+
+
+	template class OBBox_T<float>;
 }

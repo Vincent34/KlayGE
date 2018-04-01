@@ -36,31 +36,18 @@ namespace
 			: StaticMesh(model, name),
 				lighting_(true)
 		{
-			this->BindDeferredEffect(SyncLoadRenderEffect("DeepGBuffers.fxml"));
+			gbuffers_effect_ = SyncLoadRenderEffect("GBuffer.fxml");
+			no_lighting_gbuffers_effect_ = SyncLoadRenderEffect("DeepGBuffers.fxml");
+
+			this->BindDeferredEffect(gbuffers_effect_);
 			technique_ = special_shading_tech_;
-		}
-
-		void UpdateTechniques() override
-		{
-			StaticMesh::UpdateTechniques();
-
-			if (lighting_)
-			{
-				gbuffer_mrt_tech_ = effect_->TechniqueByName("GBufferMRTTech");
-				gbuffer_alpha_blend_front_mrt_tech_ = effect_->TechniqueByName("GBufferAlphaBlendFrontMRTTech");
-				gbuffer_alpha_blend_back_mrt_tech_ = effect_->TechniqueByName("GBufferAlphaBlendBackMRTTech");
-			}
-			else
-			{
-				gbuffer_mrt_tech_ = effect_->TechniqueByName("NoLightingGBufferMRTTech");
-				gbuffer_alpha_blend_front_mrt_tech_ = effect_->TechniqueByName("NoLightingGBufferAlphaBlendFrontMRTTech");
-				gbuffer_alpha_blend_back_mrt_tech_ = effect_->TechniqueByName("NoLightingGBufferAlphaBlendBackMRTTech");
-			}
 		}
 
 		void ReceivesLighting(bool lighting)
 		{
 			lighting_ = lighting;
+			this->BindDeferredEffect(lighting ? gbuffers_effect_ : no_lighting_gbuffers_effect_);
+
 			this->UpdateTechniques();
 		}
 
@@ -78,6 +65,9 @@ namespace
 
 	private:
 		bool lighting_;
+
+		RenderEffectPtr gbuffers_effect_;
+		RenderEffectPtr no_lighting_gbuffers_effect_;
 	};
 
 	class SpotLightSourceUpdate
@@ -196,7 +186,11 @@ void DeepGBuffersApp::OnCreate()
 	actionMap.AddActions(actions, actions + std::size(actions));
 
 	action_handler_t input_handler = MakeSharedPtr<input_signal>();
-	input_handler->connect(std::bind(&DeepGBuffersApp::InputHandler, this, std::placeholders::_1, std::placeholders::_2));
+	input_handler->connect(
+		[this](InputEngine const & sender, InputAction const & action)
+		{
+			this->InputHandler(sender, action);
+		});
 	inputEngine.ActionMap(actionMap, input_handler);
 
 	UIManager::Instance().Load(ResLoader::Instance().Open("DeepGBuffers.uiml"));
@@ -207,16 +201,25 @@ void DeepGBuffersApp::OnCreate()
 	id_ctrl_camera_ = dialog_->IDFromName("CtrlCamera");
 
 	dialog_->Control<UICheckBox>(id_receives_lighting_)->OnChangedEvent().connect(
-		std::bind(&DeepGBuffersApp::ReceivesLightingHandler, this, std::placeholders::_1));
+		[this](UICheckBox const & sender)
+		{
+			this->ReceivesLightingHandler(sender);
+		});
 	this->ReceivesLightingHandler(*dialog_->Control<UICheckBox>(id_receives_lighting_));
 
 	dialog_->Control<UISlider>(id_transparency_slider_)->SetValue(static_cast<int>(transparency_ * 20));
 	dialog_->Control<UISlider>(id_transparency_slider_)->OnValueChangedEvent().connect(
-		std::bind(&DeepGBuffersApp::TransparencyChangedHandler, this, std::placeholders::_1));
+		[this](UISlider const & sender)
+		{
+			this->TransparencyChangedHandler(sender);
+		});
 	this->TransparencyChangedHandler(*dialog_->Control<UISlider>(id_transparency_slider_));
 
-	dialog_->Control<UICheckBox>(id_ctrl_camera_)->OnChangedEvent().connect(std::bind(&DeepGBuffersApp::CtrlCameraHandler,
-		this, std::placeholders::_1));
+	dialog_->Control<UICheckBox>(id_ctrl_camera_)->OnChangedEvent().connect(
+		[this](UICheckBox const & sender)
+		{
+			this->CtrlCameraHandler(sender);
+		});
 	this->CtrlCameraHandler(*dialog_->Control<UICheckBox>(id_ctrl_camera_));
 
 	sky_box_ = MakeSharedPtr<SceneObjectSkyBox>();
@@ -249,7 +252,7 @@ void DeepGBuffersApp::ReceivesLightingHandler(UICheckBox const & sender)
 	bool lighting = sender.GetChecked();
 
 	RenderablePtr const & model = scene_obj_->GetRenderable();
-	for (uint32_t i = 0; i < model->NumSubrenderables(); ++i)
+	for (uint32_t i = 0; i < model->NumSubrenderables(); ++ i)
 	{
 		checked_pointer_cast<SwitchableMesh>(model->Subrenderable(i))->ReceivesLighting(lighting);
 	}

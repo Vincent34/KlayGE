@@ -34,7 +34,6 @@
 #pragma once
 
 #include <KlayGE/D3D12/D3D12FrameBuffer.hpp>
-#include <KlayGE/D3D12/D3D12Adapter.hpp>
 #include <KlayGE/D3D12/D3D12RenderEngine.hpp>
 
 #if defined KLAYGE_PLATFORM_WINDOWS_STORE
@@ -49,29 +48,25 @@
 #endif
 #endif
 
-#if defined(KLAYGE_COMPILER_MSVC)
-#pragma warning(push)
-#pragma warning(disable: 4512) // boost::iterators::function_output_iterator<T>::output_proxy doesn't have assignment operator
-#pragma warning(disable: 4913) // User defined binary operator ',' exists but no overload could convert all operands
-#elif defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter" // Ignore unused parameter 'sp'
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/signals2.hpp>
-#if defined(KLAYGE_COMPILER_MSVC)
-#pragma warning(pop)
-#elif defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
 
 namespace KlayGE
 {
 	struct RenderSettings;
+	class D3D12Adapter;
 
 	class D3D12RenderWindow : public D3D12FrameBuffer
 	{
 	public:
-		D3D12RenderWindow(D3D12AdapterPtr const & adapter, std::string const & name, RenderSettings const & settings);
+		D3D12RenderWindow(D3D12Adapter* adapter, std::string const & name, RenderSettings const & settings);
 		~D3D12RenderWindow();
 
 		void Destroy();
@@ -138,7 +133,7 @@ namespace KlayGE
 		bool	isFullScreen_;
 		uint32_t sync_interval_;
 
-		D3D12AdapterPtr			adapter_;
+		D3D12Adapter* adapter_;
 
 		bool dxgi_stereo_support_;
 		bool dxgi_allow_tearing_;

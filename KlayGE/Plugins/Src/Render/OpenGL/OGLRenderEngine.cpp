@@ -57,7 +57,14 @@
 #include <algorithm>
 #include <cstring>
 #include <boost/assert.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/lexical_cast.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
 
 #include <KlayGE/OpenGL/OGLMapping.hpp>
 #include <KlayGE/OpenGL/OGLRenderWindow.hpp>
@@ -327,7 +334,6 @@ namespace KlayGE
 		active_tex_unit_ = GL_TEXTURE0;
 		glActiveTexture(active_tex_unit_);
 
-		binded_targets_.clear();
 		binded_textures_.clear();
 		binded_samplers_.clear();
 		binded_buffers_.clear();
@@ -352,10 +358,9 @@ namespace KlayGE
 
 	void OGLRenderEngine::BindTextures(GLuint first, GLsizei count, GLuint const * targets, GLuint const * textures, bool force)
 	{
-		if (first + count > binded_targets_.size())
+		if (first + count > binded_textures_.size())
 		{
-			binded_targets_.resize(first + count, 0);
-			binded_textures_.resize(binded_targets_.size(), 0xFFFFFFFF);
+			binded_textures_.resize(first + count, std::make_pair(0, 0xFFFFFFFF));
 		}
 
 		bool dirty = force;
@@ -363,13 +368,13 @@ namespace KlayGE
 		{
 			uint32_t start_dirty = first;
 			uint32_t end_dirty = first + count;
-			while ((start_dirty != end_dirty) && (binded_targets_[start_dirty] == targets[start_dirty])
-				&& (binded_textures_[start_dirty] == textures[start_dirty]))
+			while ((start_dirty != end_dirty) && (binded_textures_[start_dirty].first == targets[start_dirty])
+				&& (binded_textures_[start_dirty].second == textures[start_dirty]))
 			{
 				++ start_dirty;
 			}
-			while ((start_dirty != end_dirty) && (binded_targets_[end_dirty - 1] == targets[end_dirty - 1])
-				&& (binded_textures_[end_dirty - 1] == textures[end_dirty - 1]))
+			while ((start_dirty != end_dirty) && (binded_textures_[end_dirty - 1].first == targets[end_dirty - 1])
+				&& (binded_textures_[end_dirty - 1].second == textures[end_dirty - 1]))
 			{
 				-- end_dirty;
 			}
@@ -394,8 +399,10 @@ namespace KlayGE
 				}
 			}
 
-			memcpy(&binded_targets_[first], &targets[first], count * sizeof(targets[0]));
-			memcpy(&binded_textures_[first], &textures[first], count * sizeof(textures[0]));
+			for (uint32_t i = first; i < first + count; ++ i)
+			{
+				binded_textures_[i] = std::make_pair(targets[i], textures[i]);
+			}
 		}
 	}
 
@@ -493,6 +500,44 @@ namespace KlayGE
 
 			memcpy(&binded[first], buffers, count * sizeof(buffers[0]));
 		}
+	}
+
+	void OGLRenderEngine::DeleteTextures(GLsizei n, GLuint const * textures)
+	{
+		for (GLsizei i = 0; i < n; ++ i)
+		{
+			for (auto iter = binded_textures_.begin(); iter != binded_textures_.end();)
+			{
+				if (iter->second == textures[i])
+				{
+					iter = binded_textures_.erase(iter);
+				}
+				else
+				{
+					++ iter;
+				}
+			}
+		}
+		glDeleteTextures(n, textures);
+	}
+
+	void OGLRenderEngine::DeleteSamplers(GLsizei n, GLuint const * samplers)
+	{
+		for (GLsizei i = 0; i < n; ++ i)
+		{
+			for (auto iter = binded_samplers_.begin(); iter != binded_samplers_.end();)
+			{
+				if (*iter == samplers[i])
+				{
+					iter = binded_samplers_.erase(iter);
+				}
+				else
+				{
+					++ iter;
+				}
+			}
+		}
+		glDeleteSamplers(n, samplers);
 	}
 
 	void OGLRenderEngine::DeleteBuffers(GLsizei n, GLuint const * buffers)
@@ -1497,6 +1542,7 @@ namespace KlayGE
 		caps_.primitive_restart_support = true;
 		caps_.multithread_rendering_support = false;
 		caps_.multithread_res_creating_support = false;
+		caps_.arbitrary_multithread_rendering_support = false;
 		caps_.mrt_independent_bit_depths_support = false;
 		caps_.logic_op_support = true;
 		caps_.independent_blend_support = true;
@@ -1511,6 +1557,7 @@ namespace KlayGE
 		{
 			caps_.render_to_texture_array_support = false;
 		}
+		caps_.render_to_msaa_texture_support = false;	// TODO
 		caps_.load_from_buffer_support = true;
 
 		caps_.gs_support = true;
@@ -1751,14 +1798,22 @@ namespace KlayGE
 		std::sort(rendertarget_format_.begin(), rendertarget_format_.end());
 		rendertarget_format_.erase(std::unique(rendertarget_format_.begin(), rendertarget_format_.end()), rendertarget_format_.end());
 
-		caps_.vertex_format_support = std::bind<bool>(&OGLRenderEngine::VertexFormatSupport, this,
-			std::placeholders::_1);
-		caps_.texture_format_support = std::bind<bool>(&OGLRenderEngine::TextureFormatSupport, this,
-			std::placeholders::_1);
-		caps_.rendertarget_format_support = std::bind<bool>(&OGLRenderEngine::RenderTargetFormatSupport, this,
-			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-		caps_.uav_format_support = std::bind<bool>(&OGLRenderEngine::UAVFormatSupport, this,
-			std::placeholders::_1);
+		caps_.vertex_format_support = [this](ElementFormat elem_fmt)
+			{
+				return this->VertexFormatSupport(elem_fmt);
+			};
+		caps_.texture_format_support = [this](ElementFormat elem_fmt)
+			{
+				return this->TextureFormatSupport(elem_fmt);
+			};
+		caps_.rendertarget_format_support = [this](ElementFormat elem_fmt, uint32_t sample_count, uint32_t sample_quality)
+			{
+				return this->RenderTargetFormatSupport(elem_fmt, sample_count, sample_quality);
+			};
+		caps_.uav_format_support = [this](ElementFormat elem_fmt)
+			{
+				return this->UAVFormatSupport(elem_fmt);
+			};
 
 		caps_.depth_texture_support = (caps_.texture_format_support(EF_D24S8) || caps_.texture_format_support(EF_D16));
 		caps_.fp_color_support = ((caps_.texture_format_support(EF_B10G11R11F) && caps_.rendertarget_format_support(EF_B10G11R11F, 1, 0))

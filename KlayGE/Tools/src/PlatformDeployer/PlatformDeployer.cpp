@@ -10,23 +10,30 @@
 #include <vector>
 #include <regex>
 
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/algorithm/string/case_conv.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
 
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/program_options.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/algorithm/string/split.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
 #include <boost/algorithm/string/trim.hpp>
 
@@ -106,7 +113,7 @@ std::string RetrieveAttrValue(XMLNodePtr node, std::string const & attr_name, st
 	XMLAttributePtr attr = node->Attrib(attr_name);
 	if (attr)
 	{
-		return attr->ValueString();
+		return std::string(attr->ValueString());
 	}
 
 	return default_value;

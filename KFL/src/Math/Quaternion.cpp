@@ -34,41 +34,6 @@
 
 namespace KlayGE
 {
-	template Quaternion_T<float>::Quaternion_T(float const * rhs) noexcept;
-	template Quaternion_T<float>::Quaternion_T(float3 const & vec, float s) noexcept;
-	template Quaternion_T<float>::Quaternion_T(Quaternion const & rhs) noexcept;
-	template Quaternion_T<float>::Quaternion_T(Quaternion&& rhs) noexcept;
-	template Quaternion_T<float>::Quaternion_T(float x, float y, float z, float w) noexcept;
-	template Quaternion const & Quaternion_T<float>::Identity() noexcept;
-	template Quaternion const & Quaternion_T<float>::operator+=(Quaternion const & rhs) noexcept;
-	template Quaternion const & Quaternion_T<float>::operator-=(Quaternion const & rhs) noexcept;
-	template Quaternion const & Quaternion_T<float>::operator*=(Quaternion const & rhs) noexcept;
-	template Quaternion const & Quaternion_T<float>::operator*=(float rhs) noexcept;
-	template Quaternion const & Quaternion_T<float>::operator/=(float rhs) noexcept;
-	template Quaternion& Quaternion_T<float>::operator=(Quaternion const & rhs) noexcept;
-	template Quaternion& Quaternion_T<float>::operator=(Quaternion&& rhs) noexcept;
-	template Quaternion const Quaternion_T<float>::operator+() const noexcept;
-	template Quaternion const Quaternion_T<float>::operator-() const noexcept;
-	template float3 const Quaternion_T<float>::v() const noexcept;
-	template void Quaternion_T<float>::v(float3 const & rhs) noexcept;
-	template bool Quaternion_T<float>::operator==(Quaternion const & rhs) const noexcept;
-
-
-	template <typename T>
-	Quaternion_T<T>::Quaternion_T(T const * rhs) noexcept
-		: quat_(rhs)
-	{
-	}
-
-	template <typename T>
-	Quaternion_T<T>::Quaternion_T(Vector_T<T, 3> const & vec, T s) noexcept
-	{
-		this->x() = vec.x();
-		this->y() = vec.y();
-		this->z() = vec.z();
-		this->w() = s;
-	}
-
 	template <typename T>
 	Quaternion_T<T>::Quaternion_T(Quaternion_T const & rhs) noexcept
 		: quat_(rhs.quat_)
@@ -79,15 +44,6 @@ namespace KlayGE
 	Quaternion_T<T>::Quaternion_T(Quaternion_T&& rhs) noexcept
 		: quat_(std::move(rhs.quat_))
 	{
-	}
-
-	template <typename T>
-	Quaternion_T<T>::Quaternion_T(T x, T y, T z, T w) noexcept
-	{
-		this->x() = x;
-		this->y() = y;
-		this->z() = z;
-		this->w() = w;
 	}
 
 	template <typename T>
@@ -180,4 +136,7 @@ namespace KlayGE
 	{
 		return quat_ == rhs.quat_;
 	}
+
+
+	template class Quaternion_T<float>;
 }

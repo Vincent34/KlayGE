@@ -72,10 +72,12 @@ namespace KlayGE
 		REDT_string,
 		REDT_texture1D,
 		REDT_texture2D,
+		REDT_texture2DMS,
 		REDT_texture3D,
 		REDT_textureCUBE,
 		REDT_texture1DArray,
 		REDT_texture2DArray,
+		REDT_texture2DMSArray,
 		REDT_texture3DArray,
 		REDT_textureCUBEArray,
 		REDT_sampler,
@@ -113,7 +115,9 @@ namespace KlayGE
 		REDT_rw_texture2DArray,
 		REDT_rw_byte_address_buffer,
 		REDT_append_structured_buffer,
-		REDT_consume_structured_buffer
+		REDT_consume_structured_buffer,
+
+		REDT_count
 	};
 
 	struct KLAYGE_CORE_API TextureSubresource
@@ -806,6 +810,9 @@ namespace KlayGE
 		void RecursiveIncludeNode(XMLNode const & root, std::vector<std::string>& include_names) const;
 		void InsertIncludeNodes(XMLDocument& target_doc, XMLNode& target_root,
 			XMLNodePtr const & target_place, XMLNode const & include_root) const;
+
+		XMLNodePtr ResolveInheritTechNode(XMLDocument& doc, XMLNode& root, XMLNodePtr const & tech_node);
+		void ResolveOverrideTechs(XMLDocument& doc, XMLNode& root);
 
 		void Load(XMLNode const & root, RenderEffect& effect);
 #endif

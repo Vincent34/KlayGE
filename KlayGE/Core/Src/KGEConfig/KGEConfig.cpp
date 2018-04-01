@@ -22,7 +22,14 @@
 #include <commctrl.h>
 #include <sstream>
 
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/lexical_cast.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
 
 #include "resource.h"
 
@@ -420,12 +427,6 @@ INT_PTR CALLBACK Audio_Tab_DlgProc(HWND hDlg, UINT uMsg, WPARAM /*wParam*/, LPAR
 			{
 				SendMessage(hFactoryCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("OpenAL")));
 				FreeLibrary(mod_al);
-			}
-			HMODULE mod_ds = LoadLibraryEx(TEXT("dsound.dll"), nullptr, 0);
-			if (mod_ds)
-			{
-				SendMessage(hFactoryCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("DSound")));
-				FreeLibrary(mod_ds);
 			}
 			HMODULE mod_xaudio = LoadLibraryEx(TEXT("XAudio2_8.dll"), nullptr, 0);
 			if (mod_xaudio)

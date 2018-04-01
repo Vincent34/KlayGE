@@ -55,22 +55,29 @@
 #include <KlayGE/RenderStateObject.hpp>
 #include <KlayGE/ShaderObject.hpp>
 #include <KFL/XMLDom.hpp>
-#include <KFL/Thread.hpp>
 #include <KFL/Hash.hpp>
 #include <KFL/CXX17/filesystem.hpp>
 
 #include <fstream>
+
 #include <boost/assert.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/algorithm/string/split.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
 #include <boost/algorithm/string/trim.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/lexical_cast.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
 
 #include <KlayGE/RenderEffect.hpp>
 
@@ -78,62 +85,24 @@ namespace
 {
 	using namespace KlayGE;
 
-	uint32_t const KFX_VERSION = 0x0120;
+	uint32_t const KFX_VERSION = 0x0140;
 
-	std::mutex singleton_mutex;
-
-	class type_define
+#if KLAYGE_IS_DEV_PLATFORM
+	ArrayRef<std::pair<char const *, size_t>> GetTypeDefines()
 	{
-	public:
-		static type_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<type_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		uint32_t TypeCode(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(types_); ++ i)
-			{
-				if (types_[i].second == name_hash)
-				{
-					return i;
-				}
-			}
-
-			KFL_UNREACHABLE("Invalid type name");
-		}
-
-		std::string_view TypeName(uint32_t code) const
-		{
-			if (code < std::size(types_))
-			{
-				return types_[code].first;
-			}
-
-			KFL_UNREACHABLE("Invalid type code");
-		}
-
-	private:
 #define NAME_AND_HASH(name) std::make_pair(name, CT_HASH(name))
-		static std::pair<char const *, size_t> constexpr types_[] =
+		static std::pair<char const *, size_t> const types[] =
 		{
 			NAME_AND_HASH("bool"),
 			NAME_AND_HASH("string"),
 			NAME_AND_HASH("texture1D"),
 			NAME_AND_HASH("texture2D"),
+			NAME_AND_HASH("texture2DMS"),
 			NAME_AND_HASH("texture3D"),
 			NAME_AND_HASH("textureCUBE"),
 			NAME_AND_HASH("texture1DArray"),
 			NAME_AND_HASH("texture2DArray"),
+			NAME_AND_HASH("texture2DMSArray"),
 			NAME_AND_HASH("texture3DArray"),
 			NAME_AND_HASH("textureCUBEArray"),
 			NAME_AND_HASH("sampler"),
@@ -174,84 +143,61 @@ namespace
 			NAME_AND_HASH("consume_structured_buffer")
 		};
 #undef NAME_AND_HASH
+		KLAYGE_STATIC_ASSERT(std::size(types) == REDT_count);
 
-		static std::unique_ptr<type_define> instance_;
-	};
-	std::unique_ptr<type_define> type_define::instance_;
+		return types;
+	}
 
-	class shade_mode_define
+	uint32_t TypeCodeFromName(std::string_view name)
 	{
-	public:
-		static shade_mode_define& instance()
+		auto const types = GetTypeDefines();
+
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < types.size(); ++ i)
 		{
-			if (!instance_)
+			if (types[i].second == name_hash)
 			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<shade_mode_define>();
-				}
+				return i;
 			}
-			return *instance_;
 		}
 
-		ShadeMode FromStr(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(sms_hash_); ++ i)
-			{
-				if (sms_hash_[i] == name_hash)
-				{
-					return static_cast<ShadeMode>(i);
-				}
-			}
+		KFL_UNREACHABLE("Invalid type name");
+	}
 
-			KFL_UNREACHABLE("Invalid ShadeMode name");
+	std::string_view TypeNameFromCode(uint32_t code)
+	{
+		auto const types = GetTypeDefines();
+		if (code < types.size())
+		{
+			return types[code].first;
 		}
 
-	private:
-		static size_t constexpr sms_hash_[] = 
+		KFL_UNREACHABLE("Invalid type code");
+	}
+
+	ShadeMode ShadeModeFromName(std::string_view name)
+	{
+		static size_t constexpr sms_hash[] =
 		{
 			CT_HASH("flat"),
 			CT_HASH("gouraud")
 		};
 
-		static std::unique_ptr<shade_mode_define> instance_;
-	};
-	std::unique_ptr<shade_mode_define> shade_mode_define::instance_;
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < std::size(sms_hash); ++ i)
+		{
+			if (sms_hash[i] == name_hash)
+			{
+				return static_cast<ShadeMode>(i);
+			}
+		}
 
-	class compare_function_define
+		KFL_UNREACHABLE("Invalid ShadeMode name");
+	}
+
+	CompareFunction CompareFunctionFromName(std::string_view name)
 	{
-	public:
-		static compare_function_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<compare_function_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		CompareFunction FromStr(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(cfs_hash_); ++ i)
-			{
-				if (cfs_hash_[i] == name_hash)
-				{
-					return static_cast<CompareFunction>(i);
-				}
-			}
-
-			KFL_UNREACHABLE("Invalid CompareFunction name");
-		}
-
-	private:
-		static size_t constexpr cfs_hash_[] =
+		static size_t constexpr cfs_hash[] =
 		{
 			CT_HASH("always_fail"),
 			CT_HASH("always_pass"),
@@ -263,126 +209,63 @@ namespace
 			CT_HASH("greater")
 		};
 
-		static std::unique_ptr<compare_function_define> instance_;
-	};
-	std::unique_ptr<compare_function_define> compare_function_define::instance_;
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < std::size(cfs_hash); ++ i)
+		{
+			if (cfs_hash[i] == name_hash)
+			{
+				return static_cast<CompareFunction>(i);
+			}
+		}
 
-	class cull_mode_define
+		KFL_UNREACHABLE("Invalid CompareFunction name");
+	}
+
+	CullMode CullModeFromName(std::string_view name)
 	{
-	public:
-		static cull_mode_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<cull_mode_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		CullMode FromStr(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(cms_hash_); ++ i)
-			{
-				if (cms_hash_[i] == name_hash)
-				{
-					return static_cast<CullMode>(i);
-				}
-			}
-
-			KFL_UNREACHABLE("Invalid CullMode name");
-		}
-
-	private:
-		static size_t constexpr cms_hash_[] =
+		static size_t constexpr cms_hash[] =
 		{
 			CT_HASH("none"),
 			CT_HASH("front"),
 			CT_HASH("back")
 		};
 
-		static std::unique_ptr<cull_mode_define> instance_;
-	};
-	std::unique_ptr<cull_mode_define> cull_mode_define::instance_;
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < std::size(cms_hash); ++ i)
+		{
+			if (cms_hash[i] == name_hash)
+			{
+				return static_cast<CullMode>(i);
+			}
+		}
 
-	class polygon_mode_define
+		KFL_UNREACHABLE("Invalid CullMode name");
+	}
+
+	PolygonMode PolygonModeFromName(std::string_view name)
 	{
-	public:
-		static polygon_mode_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<polygon_mode_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		PolygonMode FromStr(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(pms_hash_); ++ i)
-			{
-				if (pms_hash_[i] == name_hash)
-				{
-					return static_cast<PolygonMode>(i);
-				}
-			}
-
-			KFL_UNREACHABLE("Invalid PolygonMode name");
-		}
-
-	private:
-		static size_t constexpr pms_hash_[] =
+		static size_t constexpr pms_hash[] =
 		{
 			CT_HASH("point"),
 			CT_HASH("line"),
 			CT_HASH("fill")
 		};
 
-		static std::unique_ptr<polygon_mode_define> instance_;
-	};
-	std::unique_ptr<polygon_mode_define> polygon_mode_define::instance_;
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < std::size(pms_hash); ++ i)
+		{
+			if (pms_hash[i] == name_hash)
+			{
+				return static_cast<PolygonMode>(i);
+			}
+		}
 
-	class alpha_blend_factor_define
+		KFL_UNREACHABLE("Invalid PolygonMode name");
+	}
+
+	AlphaBlendFactor AlphaBlendFactorFromName(std::string_view name)
 	{
-	public:
-		static alpha_blend_factor_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<alpha_blend_factor_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		AlphaBlendFactor FromStr(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(abfs_hash_); ++ i)
-			{
-				if (abfs_hash_[i] == name_hash)
-				{
-					return static_cast<AlphaBlendFactor>(i);
-				}
-			}
-
-			KFL_UNREACHABLE("Invalid AlphaBlendFactor name");
-		}
-
-	private:
-		static size_t constexpr abfs_hash_[] =
+		static size_t constexpr abfs_hash[] =
 		{
 			CT_HASH("zero"),
 			CT_HASH("one"),
@@ -403,42 +286,21 @@ namespace
 			CT_HASH("inv_src1_color")
 		};
 
-		static std::unique_ptr<alpha_blend_factor_define> instance_;
-	};
-	std::unique_ptr<alpha_blend_factor_define> alpha_blend_factor_define::instance_;
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < std::size(abfs_hash); ++ i)
+		{
+			if (abfs_hash[i] == name_hash)
+			{
+				return static_cast<AlphaBlendFactor>(i);
+			}
+		}
 
-	class blend_operation_define
+		KFL_UNREACHABLE("Invalid AlphaBlendFactor name");
+	}
+
+	BlendOperation BlendOperationFromName(std::string_view name)
 	{
-	public:
-		static blend_operation_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<blend_operation_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		BlendOperation FromStr(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(bops_hash_); ++ i)
-			{
-				if (bops_hash_[i] == name_hash)
-				{
-					return static_cast<BlendOperation>(i + 1);
-				}
-			}
-
-			KFL_UNREACHABLE("Invalid BlendOperation name");
-		}
-
-	private:
-		static size_t constexpr bops_hash_[] =
+		static size_t constexpr bops_hash[] =
 		{
 			CT_HASH("add"),
 			CT_HASH("sub"),
@@ -447,42 +309,21 @@ namespace
 			CT_HASH("max")
 		};
 
-		static std::unique_ptr<blend_operation_define> instance_;
-	};
-	std::unique_ptr<blend_operation_define> blend_operation_define::instance_;
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < std::size(bops_hash); ++ i)
+		{
+			if (bops_hash[i] == name_hash)
+			{
+				return static_cast<BlendOperation>(i + 1);
+			}
+		}
 
-	class stencil_operation_define
+		KFL_UNREACHABLE("Invalid BlendOperation name");
+	}
+
+	StencilOperation StencilOperationFromName(std::string_view name)
 	{
-	public:
-		static stencil_operation_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<stencil_operation_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		StencilOperation FromStr(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(sops_hash_); ++ i)
-			{
-				if (sops_hash_[i] == name_hash)
-				{
-					return static_cast<StencilOperation>(i);
-				}
-			}
-
-			KFL_UNREACHABLE("Invalid StencilOperation name");
-		}
-
-	private:
-		static size_t constexpr sops_hash_[] =
+		static size_t constexpr sops_hash[] =
 		{
 			CT_HASH("keep"),
 			CT_HASH("zero"),
@@ -494,58 +335,21 @@ namespace
 			CT_HASH("decr_wrap")
 		};
 
-		static std::unique_ptr<stencil_operation_define> instance_;
-	};
-	std::unique_ptr<stencil_operation_define> stencil_operation_define::instance_;
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < std::size(sops_hash); ++ i)
+		{
+			if (sops_hash[i] == name_hash)
+			{
+				return static_cast<StencilOperation>(i);
+			}
+		}
 
-	class texture_filter_mode_define
+		KFL_UNREACHABLE("Invalid StencilOperation name");
+	}
+
+	TexFilterOp TexFilterOpFromName(std::string_view name)
 	{
-	public:
-		static texture_filter_mode_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<texture_filter_mode_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		TexFilterOp FromStr(std::string_view name) const
-		{
-			int cmp;
-			std::string_view f;
-			if (0 == name.find("cmp_"))
-			{
-				cmp = 1;
-				f = name.substr(4);
-			}
-			else
-			{
-				cmp = 0;
-				f = name;
-			}
-			size_t const f_hash = HashRange(f.begin(), f.end());
-			for (uint32_t i = 0; i < std::size(tfs_hash_); ++ i)
-			{
-				if (tfs_hash_[i] == f_hash)
-				{
-					return static_cast<TexFilterOp>((cmp << 4) + i);
-				}
-			}
-			if (CT_HASH("anisotropic") == f_hash)
-			{
-				return static_cast<TexFilterOp>((cmp << 4) + TFO_Anisotropic);
-			}
-
-			KFL_UNREACHABLE("Invalid TexFilterOp name");
-		}
-
-	private:
-		static size_t constexpr tfs_hash_[] =
+		static size_t constexpr tfs_hash[] =
 		{
 			CT_HASH("min_mag_mip_point"),
 			CT_HASH("min_mag_point_mip_linear"),
@@ -557,42 +361,37 @@ namespace
 			CT_HASH("min_mag_mip_linear")
 		};
 
-		static std::unique_ptr<texture_filter_mode_define> instance_;
-	};
-	std::unique_ptr<texture_filter_mode_define> texture_filter_mode_define::instance_;
+		int cmp;
+		std::string_view f;
+		if (0 == name.find("cmp_"))
+		{
+			cmp = 1;
+			f = name.substr(4);
+		}
+		else
+		{
+			cmp = 0;
+			f = name;
+		}
+		size_t const f_hash = HashRange(f.begin(), f.end());
+		for (uint32_t i = 0; i < std::size(tfs_hash); ++ i)
+		{
+			if (tfs_hash[i] == f_hash)
+			{
+				return static_cast<TexFilterOp>((cmp << 4) + i);
+			}
+		}
+		if (CT_HASH("anisotropic") == f_hash)
+		{
+			return static_cast<TexFilterOp>((cmp << 4) + TFO_Anisotropic);
+		}
 
-	class texture_addr_mode_define
+		KFL_UNREACHABLE("Invalid TexFilterOp name");
+	}
+
+	TexAddressingMode TexAddressingModeFromName(std::string_view name)
 	{
-	public:
-		static texture_addr_mode_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<texture_addr_mode_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		TexAddressingMode FromStr(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(tams_hash_); ++ i)
-			{
-				if (tams_hash_[i] == name_hash)
-				{
-					return static_cast<TexAddressingMode>(i);
-				}
-			}
-
-			KFL_UNREACHABLE("Invalid TexAddressingMode name");
-		}
-
-	private:
-		static size_t constexpr tams_hash_[] =
+		static size_t constexpr tams_hash[] =
 		{
 			CT_HASH("wrap"),
 			CT_HASH("mirror"),
@@ -600,42 +399,21 @@ namespace
 			CT_HASH("border")
 		};
 
-		static std::unique_ptr<texture_addr_mode_define> instance_;
-	};
-	std::unique_ptr<texture_addr_mode_define> texture_addr_mode_define::instance_;
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < std::size(tams_hash); ++ i)
+		{
+			if (tams_hash[i] == name_hash)
+			{
+				return static_cast<TexAddressingMode>(i);
+			}
+		}
 
-	class logic_operation_define
+		KFL_UNREACHABLE("Invalid TexAddressingMode name");
+	}
+
+	LogicOperation LogicOperationFromName(std::string_view name)
 	{
-	public:
-		static logic_operation_define& instance()
-		{
-			if (!instance_)
-			{
-				std::lock_guard<std::mutex> lock(singleton_mutex);
-				if (!instance_)
-				{
-					instance_ = MakeUniquePtr<logic_operation_define>();
-				}
-			}
-			return *instance_;
-		}
-
-		LogicOperation FromStr(std::string_view name) const
-		{
-			size_t const name_hash = HashRange(name.begin(), name.end());
-			for (uint32_t i = 0; i < std::size(lops_hash_); ++ i)
-			{
-				if (lops_hash_[i] == name_hash)
-				{
-					return static_cast<LogicOperation>(i);
-				}
-			}
-
-			KFL_UNREACHABLE("Invalid LogicOperation name");
-		}
-
-	private:
-		static size_t constexpr lops_hash_[] =
+		static size_t constexpr lops_hash[] =
 		{
 			CT_HASH("clear"),
 			CT_HASH("set"),
@@ -655,11 +433,18 @@ namespace
 			CT_HASH("or_inverted")
 		};
 
-		static std::unique_ptr<logic_operation_define> instance_;
-	};
-	std::unique_ptr<logic_operation_define> logic_operation_define::instance_;
+		size_t const name_hash = HashRange(name.begin(), name.end());
+		for (uint32_t i = 0; i < std::size(lops_hash); ++ i)
+		{
+			if (lops_hash[i] == name_hash)
+			{
+				return static_cast<LogicOperation>(i);
+			}
+		}
 
-#if KLAYGE_IS_DEV_PLATFORM
+		KFL_UNREACHABLE("Invalid LogicOperation name");
+	}
+
 	bool BoolFromStr(std::string_view name)
 	{
 		if (("true" == name) || ("1" == name))
@@ -672,10 +457,10 @@ namespace
 		}
 	}
 
-	int get_index(XMLNodePtr const & node)
+	int get_index(XMLNode const & node)
 	{
 		int index = 0;
-		XMLAttributePtr attr = node->Attrib("index");
+		XMLAttributePtr attr = node.Attrib("index");
 		if (attr)
 		{
 			index = attr->ValueInt();
@@ -683,12 +468,12 @@ namespace
 		return index;
 	}
 
-	std::string get_profile(XMLNodePtr const & node)
+	std::string get_profile(XMLNode const & node)
 	{
-		XMLAttributePtr attr = node->Attrib("profile");
+		XMLAttributePtr attr = node.Attrib("profile");
 		if (attr)
 		{
-			return attr->ValueString();
+			return std::string(attr->ValueString());
 		}
 		else
 		{
@@ -696,13 +481,13 @@ namespace
 		}
 	}
 
-	std::string get_func_name(XMLNodePtr const & node)
+	std::string get_func_name(XMLNode const & node)
 	{
-		std::string value = node->Attrib("value")->ValueString();
-		return value.substr(0, value.find("("));
+		std::string_view value = node.Attrib("value")->ValueString();
+		return std::string(value.substr(0, value.find("(")));
 	}
 
-	std::unique_ptr<RenderVariable> read_var(XMLNodePtr const & node, uint32_t type, uint32_t array_size)
+	std::unique_ptr<RenderVariable> read_var(XMLNode const & node, uint32_t type, uint32_t array_size)
 	{
 		std::unique_ptr<RenderVariable> var;
 		XMLAttributePtr attr;
@@ -712,7 +497,7 @@ namespace
 		case REDT_bool:
 			if (0 == array_size)
 			{
-				attr = node->Attrib("value");
+				attr = node.Attrib("value");
 				bool tmp = false;
 				if (attr)
 				{
@@ -727,7 +512,7 @@ namespace
 		case REDT_uint:
 			if (0 == array_size)
 			{
-				attr = node->Attrib("value");
+				attr = node.Attrib("value");
 				uint32_t tmp = 0;
 				if (attr)
 				{
@@ -741,13 +526,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableUIntArray>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<uint32_t> init_val(std::min(array_size, static_cast<uint32_t>(strs.size())), 0);
@@ -768,7 +553,7 @@ namespace
 		case REDT_int:
 			if (0 == array_size)
 			{
-				attr = node->Attrib("value");
+				attr = node.Attrib("value");
 				int32_t tmp = 0;
 				if (attr)
 				{
@@ -782,13 +567,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableIntArray>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<int32_t> init_val(std::min(array_size, static_cast<uint32_t>(strs.size())), 0);
@@ -808,11 +593,11 @@ namespace
 
 		case REDT_string:
 			{
-				attr = node->Attrib("value");
+				attr = node.Attrib("value");
 				std::string tmp;
 				if (attr)
 				{
-					tmp = attr->ValueString();
+					tmp = std::string(attr->ValueString());
 				}
 
 				var = MakeUniquePtr<RenderVariableString>();
@@ -835,10 +620,10 @@ namespace
 		case REDT_rw_texture2DArray:
 			var = MakeUniquePtr<RenderVariableTexture>();
 			*var = TexturePtr();
-			attr = node->Attrib("elem_type");
+			attr = node.Attrib("elem_type");
 			if (attr)
 			{
-				*var = attr->ValueString();
+				*var = std::string(attr->ValueString());
 			}
 			else
 			{
@@ -846,32 +631,69 @@ namespace
 			}
 			break;
 
+		case REDT_texture2DMS:
+		case REDT_texture2DMSArray:
+			{
+				var = MakeUniquePtr<RenderVariableTexture>();
+				*var = TexturePtr();
+
+				std::string elem_type;
+				attr = node.Attrib("elem_type");
+				if (attr)
+				{
+					elem_type = attr->ValueString();
+				}
+				else
+				{
+					elem_type = "float4";
+				}
+				
+				std::string sample_count;
+				attr = node.Attrib("sample_count");
+				if (attr)
+				{
+					sample_count = attr->ValueString();
+				}
+				else
+				{
+					sample_count = "1";
+				}
+
+				*var = elem_type + ", " + sample_count;
+			}
+			break;
+
 		case REDT_sampler:
 			{
 				SamplerStateDesc desc;
 
-				for (XMLNodePtr state_node = node->FirstNode("state"); state_node; state_node = state_node->NextSibling("state"))
+				for (XMLNodePtr state_node = node.FirstNode("state"); state_node; state_node = state_node->NextSibling("state"))
 				{
-					std::string name = state_node->Attrib("name")->ValueString();
-					size_t const name_hash = RT_HASH(name.c_str());
+					std::string_view const name = state_node->Attrib("name")->ValueString();
+					size_t const name_hash = HashRange(name.begin(), name.end());
 
-					XMLAttributePtr value_attr = state_node->Attrib("value");
+					XMLAttributePtr const value_attr = state_node->Attrib("value");
+					std::string_view value_str;
+					if (value_attr)
+					{
+						value_str = value_attr->ValueString();
+					}
 
 					if (CT_HASH("filtering") == name_hash)
 					{
-						desc.filter = texture_filter_mode_define::instance().FromStr(value_attr->ValueString());
+						desc.filter = TexFilterOpFromName(value_str);
 					}
 					else if (CT_HASH("address_u") == name_hash)
 					{
-						desc.addr_mode_u = texture_addr_mode_define::instance().FromStr(value_attr->ValueString());
+						desc.addr_mode_u = TexAddressingModeFromName(value_str);
 					}
 					else if (CT_HASH("address_v") == name_hash)
 					{
-						desc.addr_mode_v = texture_addr_mode_define::instance().FromStr(value_attr->ValueString());
+						desc.addr_mode_v = TexAddressingModeFromName(value_str);
 					}
 					else if (CT_HASH("address_w") == name_hash)
 					{
-						desc.addr_mode_w = texture_addr_mode_define::instance().FromStr(value_attr->ValueString());
+						desc.addr_mode_w = TexAddressingModeFromName(value_str);
 					}
 					else if (CT_HASH("max_anisotropy") == name_hash)
 					{
@@ -891,7 +713,7 @@ namespace
 					}
 					else if (CT_HASH("cmp_func") == name_hash)
 					{
-						desc.cmp_func = compare_function_define::instance().FromStr(value_attr->ValueString());
+						desc.cmp_func = CompareFunctionFromName(value_str);
 					}
 					else if (CT_HASH("border_clr") == name_hash)
 					{
@@ -942,7 +764,7 @@ namespace
 			if (0 == array_size)
 			{
 				float tmp = 0;
-				attr = node->Attrib("value");
+				attr = node.Attrib("value");
 				if (attr)
 				{
 					tmp = attr->ValueFloat();
@@ -955,13 +777,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableFloatArray>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<float> init_val(std::min(array_size, static_cast<uint32_t>(strs.size())), 0.0f);
@@ -983,12 +805,12 @@ namespace
 			if (0 == array_size)
 			{
 				uint2 tmp(0, 0);
-				attr = node->Attrib("x");
+				attr = node.Attrib("x");
 				if (attr)
 				{
 					tmp.x() = attr->ValueUInt();
 				}
-				attr = node->Attrib("y");
+				attr = node.Attrib("y");
 				if (attr)
 				{
 					tmp.y() = attr->ValueUInt();
@@ -1001,13 +823,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableInt2Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<uint2> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 1) / 2)), int2(0, 0));
@@ -1032,17 +854,17 @@ namespace
 			if (0 == array_size)
 			{
 				uint3 tmp(0, 0, 0);
-				attr = node->Attrib("x");
+				attr = node.Attrib("x");
 				if (attr)
 				{
 					tmp.x() = attr->ValueUInt();
 				}
-				attr = node->Attrib("y");
+				attr = node.Attrib("y");
 				if (attr)
 				{
 					tmp.y() = attr->ValueUInt();
 				}
-				attr = node->Attrib("z");
+				attr = node.Attrib("z");
 				if (attr)
 				{
 					tmp.z() = attr->ValueUInt();
@@ -1055,13 +877,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableInt3Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<uint3> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 2) / 3)), int3(0, 0, 0));
@@ -1086,22 +908,22 @@ namespace
 			if (0 == array_size)
 			{
 				uint4 tmp(0, 0, 0, 0);
-				attr = node->Attrib("x");
+				attr = node.Attrib("x");
 				if (attr)
 				{
 					tmp.x() = attr->ValueUInt();
 				}
-				attr = node->Attrib("y");
+				attr = node.Attrib("y");
 				if (attr)
 				{
 					tmp.y() = attr->ValueUInt();
 				}
-				attr = node->Attrib("z");
+				attr = node.Attrib("z");
 				if (attr)
 				{
 					tmp.z() = attr->ValueUInt();
 				}
-				attr = node->Attrib("w");
+				attr = node.Attrib("w");
 				if (attr)
 				{
 					tmp.w() = attr->ValueUInt();
@@ -1114,13 +936,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableInt4Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<int4> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 3) / 4)), int4(0, 0, 0, 0));
@@ -1145,12 +967,12 @@ namespace
 			if (0 == array_size)
 			{
 				int2 tmp(0, 0);
-				attr = node->Attrib("x");
+				attr = node.Attrib("x");
 				if (attr)
 				{
 					tmp.x() = attr->ValueInt();
 				}
-				attr = node->Attrib("y");
+				attr = node.Attrib("y");
 				if (attr)
 				{
 					tmp.y() = attr->ValueInt();
@@ -1163,13 +985,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableInt2Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<int2> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 1) / 2)), int2(0, 0));
@@ -1194,17 +1016,17 @@ namespace
 			if (0 == array_size)
 			{
 				int3 tmp(0, 0, 0);
-				attr = node->Attrib("x");
+				attr = node.Attrib("x");
 				if (attr)
 				{
 					tmp.x() = attr->ValueInt();
 				}
-				attr = node->Attrib("y");
+				attr = node.Attrib("y");
 				if (attr)
 				{
 					tmp.y() = attr->ValueInt();
 				}
-				attr = node->Attrib("z");
+				attr = node.Attrib("z");
 				if (attr)
 				{
 					tmp.z() = attr->ValueInt();
@@ -1217,13 +1039,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableInt3Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<int3> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 2) / 3)), int3(0, 0, 0));
@@ -1248,22 +1070,22 @@ namespace
 			if (0 == array_size)
 			{
 				int4 tmp(0, 0, 0, 0);
-				attr = node->Attrib("x");
+				attr = node.Attrib("x");
 				if (attr)
 				{
 					tmp.x() = attr->ValueInt();
 				}
-				attr = node->Attrib("y");
+				attr = node.Attrib("y");
 				if (attr)
 				{
 					tmp.y() = attr->ValueInt();
 				}
-				attr = node->Attrib("z");
+				attr = node.Attrib("z");
 				if (attr)
 				{
 					tmp.z() = attr->ValueInt();
 				}
-				attr = node->Attrib("w");
+				attr = node.Attrib("w");
 				if (attr)
 				{
 					tmp.w() = attr->ValueInt();
@@ -1276,13 +1098,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableInt4Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<int4> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 3) / 4)), int4(0, 0, 0, 0));
@@ -1307,12 +1129,12 @@ namespace
 			if (0 == array_size)
 			{
 				float2 tmp(0, 0);
-				attr = node->Attrib("x");
+				attr = node.Attrib("x");
 				if (attr)
 				{
 					tmp.x() = attr->ValueFloat();
 				}
-				attr = node->Attrib("y");
+				attr = node.Attrib("y");
 				if (attr)
 				{
 					tmp.y() = attr->ValueFloat();
@@ -1325,13 +1147,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableFloat2Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<float2> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 1) / 2)), float2(0, 0));
@@ -1356,17 +1178,17 @@ namespace
 			if (0 == array_size)
 			{
 				float3 tmp(0, 0, 0);
-				attr = node->Attrib("x");
+				attr = node.Attrib("x");
 				if (attr)
 				{
 					tmp.x() = attr->ValueFloat();
 				}
-				attr = node->Attrib("y");
+				attr = node.Attrib("y");
 				if (attr)
 				{
 					tmp.y() = attr->ValueFloat();
 				}
-				attr = node->Attrib("z");
+				attr = node.Attrib("z");
 				if (attr)
 				{
 					tmp.z() = attr->ValueFloat();
@@ -1379,13 +1201,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableFloat3Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<float3> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 2) / 3)), float3(0, 0, 0));
@@ -1410,22 +1232,22 @@ namespace
 			if (0 == array_size)
 			{
 				float4 tmp(0, 0, 0, 0);
-				attr = node->Attrib("x");
+				attr = node.Attrib("x");
 				if (attr)
 				{
 					tmp.x() = attr->ValueFloat();
 				}
-				attr = node->Attrib("y");
+				attr = node.Attrib("y");
 				if (attr)
 				{
 					tmp.y() = attr->ValueFloat();
 				}
-				attr = node->Attrib("z");
+				attr = node.Attrib("z");
 				if (attr)
 				{
 					tmp.z() = attr->ValueFloat();
 				}
-				attr = node->Attrib("w");
+				attr = node.Attrib("w");
 				if (attr)
 				{
 					tmp.w() = attr->ValueFloat();
@@ -1438,13 +1260,13 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableFloat4Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
 						std::vector<float4> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 3) / 4)), float4(0, 0, 0, 0));
@@ -1473,7 +1295,7 @@ namespace
 				{
 					for (int x = 0; x < 4; ++ x)
 					{
-						attr = node->Attrib(std::string("_")
+						attr = node.Attrib(std::string("_")
 							+ static_cast<char>('0' + y) + static_cast<char>('0' + x));
 						if (attr)
 						{
@@ -1489,16 +1311,17 @@ namespace
 			{
 				var = MakeUniquePtr<RenderVariableFloat4x4Array>();
 
-				XMLNodePtr value_node = node->FirstNode("value");
+				XMLNodePtr value_node = node.FirstNode("value");
 				if (value_node)
 				{
 					value_node = value_node->FirstNode();
 					if (value_node && (XNT_CData == value_node->Type()))
 					{
-						std::string const & value_str = value_node->ValueString();
+						std::string_view const value_str = value_node->ValueString();
 						std::vector<std::string> strs;
 						boost::algorithm::split(strs, value_str, boost::is_any_of(","));
-						std::vector<float4> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 3) / 4)), float4(0, 0, 0, 0));
+						std::vector<float4x4> init_val(std::min(array_size, static_cast<uint32_t>((strs.size() + 15) / 16)),
+							float4x4(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
 						for (size_t index = 0; index < init_val.size(); ++ index)
 						{
 							for (size_t j = 0; j < 16; ++ j)
@@ -1524,10 +1347,10 @@ namespace
 		case REDT_append_structured_buffer:
 			var = MakeUniquePtr<RenderVariableBuffer>();
 			*var = GraphicsBufferPtr();
-			attr = node->Attrib("elem_type");
+			attr = node.Attrib("elem_type");
 			if (attr)
 			{
-				*var = attr->ValueString();
+				*var = std::string(attr->ValueString());
 			}
 			else
 			{
@@ -1633,10 +1456,12 @@ namespace
 
 		case REDT_texture1D:
 		case REDT_texture2D:
+		case REDT_texture2DMS:
 		case REDT_texture3D:
 		case REDT_textureCUBE:
 		case REDT_texture1DArray:
 		case REDT_texture2DArray:
+		case REDT_texture2DMSArray:
 		case REDT_texture3DArray:
 		case REDT_textureCUBEArray:
 		case REDT_rw_texture1D:
@@ -2180,10 +2005,12 @@ namespace
 
 		case REDT_texture1D:
 		case REDT_texture2D:
+		case REDT_texture2DMS:
 		case REDT_texture3D:
 		case REDT_textureCUBE:
 		case REDT_texture1DArray:
 		case REDT_texture2DArray:
+		case REDT_texture2DMSArray:
 		case REDT_texture3DArray:
 		case REDT_textureCUBEArray:
 		case REDT_rw_texture1D:
@@ -2330,7 +2157,7 @@ namespace
 				uint4 tmp;
 				var.Value(tmp);
 
-				for (int i = 0; i < 3; ++ i)
+				for (int i = 0; i < 4; ++ i)
 				{
 					tmp[i] = Native2LE(tmp[i]);
 				}
@@ -2701,9 +2528,9 @@ namespace KlayGE
 #if KLAYGE_IS_DEV_PLATFORM
 	void RenderEffectAnnotation::Load(XMLNodePtr const & node)
 	{
-		type_ = type_define::instance().TypeCode(node->Attrib("type")->ValueString());
+		type_ = TypeCodeFromName(node->Attrib("type")->ValueString());
 		name_ = node->Attrib("name")->ValueString();
-		var_ = read_var(node, type_, 0);
+		var_ = read_var(*node, type_, 0);
 	}
 #endif
 
@@ -2887,7 +2714,7 @@ namespace KlayGE
 			XMLAttributePtr attr = node->Attrib("name");
 			BOOST_ASSERT(attr);
 
-			std::string const & include_name = attr->ValueString();
+			std::string const include_name = std::string(attr->ValueString());
 
 			include_docs.push_back(MakeUniquePtr<XMLDocument>());
 			XMLNodePtr include_root = include_docs.back()->Parse(ResLoader::Instance().Open(include_name));
@@ -2954,7 +2781,7 @@ namespace KlayGE
 			XMLAttributePtr attr = node->Attrib("name");
 			BOOST_ASSERT(attr);
 
-			std::string const & include_name = attr->ValueString();
+			std::string const include_name = std::string(attr->ValueString());
 
 			XMLDocument include_doc;
 			XMLNodePtr include_root = include_doc.Parse(ResLoader::Instance().Open(include_name));
@@ -2989,6 +2816,127 @@ namespace KlayGE
 		}
 	}
 
+	XMLNodePtr RenderEffectTemplate::ResolveInheritTechNode(XMLDocument& doc, XMLNode& root, XMLNodePtr const & tech_node)
+	{
+		auto inherit_attr = tech_node->Attrib("inherit");
+		if (!inherit_attr)
+		{
+			return tech_node;
+		}
+
+		auto const tech_name = tech_node->Attrib("name")->ValueString();
+
+		auto const inherit_name = inherit_attr->ValueString();
+		BOOST_ASSERT(inherit_name != tech_name);
+
+		XMLNodePtr new_tech_node;
+		for (auto node = root.FirstNode("technique"); node; node = node->NextSibling("technique"))
+		{
+			auto const parent_tech_name = node->Attrib("name")->ValueString();
+			if (parent_tech_name == inherit_name)
+			{
+				auto parent_node = this->ResolveInheritTechNode(doc, root, node);
+				new_tech_node = doc.CloneNode(parent_node);
+
+				for (auto tech_anno_node = tech_node->FirstNode("annotation"); tech_anno_node;
+					tech_anno_node = tech_anno_node->NextSibling("annotation"))
+				{
+					new_tech_node->AppendNode(doc.CloneNode(tech_anno_node));
+				}
+				for (auto tech_macro_node = tech_node->FirstNode("macro"); tech_macro_node;
+					tech_macro_node = tech_macro_node->NextSibling("macro"))
+				{
+					new_tech_node->AppendNode(doc.CloneNode(tech_macro_node));
+				}
+				for (auto pass_node = tech_node->FirstNode("pass"); pass_node; pass_node = pass_node->NextSibling("pass"))
+				{
+					auto const pass_name = pass_node->Attrib("name")->ValueString();
+
+					bool found_pass = false;
+					for (auto new_pass_node = new_tech_node->FirstNode("pass"); new_pass_node;
+						new_pass_node = new_pass_node->NextSibling("pass"))
+					{
+						auto const parent_pass_name = new_pass_node->Attrib("name")->ValueString();
+
+						if (pass_name == parent_pass_name)
+						{
+							for (auto pass_anno_node = pass_node->FirstNode("annotation"); pass_anno_node;
+								pass_anno_node = pass_anno_node->NextSibling("annotation"))
+							{
+								new_pass_node->AppendNode(doc.CloneNode(pass_anno_node));
+							}
+							for (auto pass_macro_node = pass_node->FirstNode("macro"); pass_macro_node;
+								pass_macro_node = pass_macro_node->NextSibling("macro"))
+							{
+								new_pass_node->AppendNode(doc.CloneNode(pass_macro_node));
+							}
+							for (auto pass_state_node = pass_node->FirstNode("state"); pass_state_node;
+								pass_state_node = pass_state_node->NextSibling("state"))
+							{
+								new_pass_node->AppendNode(doc.CloneNode(pass_state_node));
+							}
+
+							found_pass = true;
+							break;
+						}
+					}
+
+					if (!found_pass)
+					{
+						new_tech_node->AppendNode(doc.CloneNode(pass_node));
+					}
+				}
+
+				new_tech_node->RemoveAttrib(new_tech_node->Attrib("name"));
+				new_tech_node->AppendAttrib(doc.AllocAttribString("name", tech_name));
+
+				break;
+			}
+		}
+		BOOST_ASSERT(new_tech_node);
+
+		return new_tech_node;
+	}
+
+	void RenderEffectTemplate::ResolveOverrideTechs(XMLDocument& doc, XMLNode& root)
+	{
+		std::vector<XMLNodePtr> tech_nodes;
+		for (XMLNodePtr node = root.FirstNode("technique"); node; node = node->NextSibling("technique"))
+		{
+			tech_nodes.push_back(node);
+		}
+
+		for (auto const & node : tech_nodes)
+		{
+			auto override_attr = node->Attrib("override");
+			if (override_attr)
+			{
+				auto override_tech_name = override_attr->ValueString();
+				for (auto& overrided_node : tech_nodes)
+				{
+					auto name = overrided_node->Attrib("name")->ValueString();
+					if (override_tech_name == name)
+					{
+						auto new_node = doc.CloneNode(this->ResolveInheritTechNode(doc, root, node));
+						new_node->RemoveAttrib(new_node->Attrib("name"));
+						new_node->AppendAttrib(doc.AllocAttribString("name", name));
+						auto attr = new_node->Attrib("override");
+						if (attr)
+						{
+							new_node->RemoveAttrib(attr);
+						}
+
+						root.InsertNode(overrided_node, new_node);
+						root.RemoveNode(overrided_node);
+						overrided_node = new_node;
+
+						break;
+					}
+				}
+			}
+		}
+	}
+
 	void RenderEffectTemplate::Load(XMLNode const & root, RenderEffect& effect)
 	{
 		{
@@ -3019,11 +2967,11 @@ namespace KlayGE
 		{
 			XMLNodePtr const & node = parameter_nodes[param_index];
 
-			uint32_t type = type_define::instance().TypeCode(node->Attrib("type")->ValueString());
+			uint32_t type = TypeCodeFromName(node->Attrib("type")->ValueString());
 			if ((type != REDT_sampler)
-				&& (type != REDT_texture1D) && (type != REDT_texture2D) && (type != REDT_texture3D)
+				&& (type != REDT_texture1D) && (type != REDT_texture2D) && (type != REDT_texture2DMS) && (type != REDT_texture3D)
 				&& (type != REDT_textureCUBE)
-				&& (type != REDT_texture1DArray) && (type != REDT_texture2DArray)
+				&& (type != REDT_texture1DArray) && (type != REDT_texture2DArray) && (type != REDT_texture2DMSArray)
 				&& (type != REDT_texture3DArray) && (type != REDT_textureCUBEArray)
 				&& (type != REDT_buffer) && (type != REDT_structured_buffer)
 				&& (type != REDT_byte_address_buffer) && (type != REDT_rw_buffer)
@@ -3035,7 +2983,7 @@ namespace KlayGE
 			{
 				RenderEffectConstantBuffer* cbuff = nullptr;
 				XMLNodePtr parent_node = node->Parent();
-				std::string cbuff_name = parent_node->AttribString("name", "global_cb");
+				std::string const cbuff_name = std::string(parent_node->AttribString("name", "global_cb"));
 				size_t const cbuff_name_hash = RT_HASH(cbuff_name.c_str());
 
 				bool found = false;
@@ -3203,6 +3151,8 @@ namespace KlayGE
 						}
 					}
 				}
+
+				this->ResolveOverrideTechs(*frag_docs[0], *root);
 
 				this->Load(*root, effect);
 			}
@@ -3558,10 +3508,12 @@ namespace KlayGE
 				{
 				case REDT_texture1D:
 				case REDT_texture2D:
+				case REDT_texture2DMS:
 				case REDT_texture3D:
 				case REDT_textureCUBE:
 				case REDT_texture1DArray:
 				case REDT_texture2DArray:
+				case REDT_texture2DMSArray:
 				case REDT_texture3DArray:
 				case REDT_textureCUBEArray:
 				case REDT_sampler:
@@ -3581,7 +3533,7 @@ namespace KlayGE
 					break;
 
 				default:
-					str += std::string(type_define::instance().TypeName(param.Type())) + " " + param.Name();
+					str += std::string(TypeNameFromCode(param.Type())) + " " + param.Name();
 					if (param.ArraySize())
 					{
 						str += "[" + *param.ArraySize() + "]";
@@ -3603,10 +3555,12 @@ namespace KlayGE
 			{
 			case REDT_texture1D:
 			case REDT_texture2D:
+			case REDT_texture2DMS:
 			case REDT_texture3D:
 			case REDT_textureCUBE:
 			case REDT_texture1DArray:
 			case REDT_texture2DArray:
+			case REDT_texture2DMSArray:
 			case REDT_textureCUBEArray:
 			case REDT_buffer:
 			case REDT_structured_buffer:
@@ -3637,6 +3591,10 @@ namespace KlayGE
 				str += "Texture2D<" + elem_type + "> " + param_name + ";\n";
 				break;
 
+			case REDT_texture2DMS:
+				str += "Texture2DMS<" + elem_type + "> " + param_name + ";\n";
+				break;
+
 			case REDT_texture3D:
 				str += "#if KLAYGE_MAX_TEX_DEPTH <= 1\n";
 				str += "Texture2D<" + elem_type + "> " + param_name + ";\n";
@@ -3658,6 +3616,12 @@ namespace KlayGE
 			case REDT_texture2DArray:
 				str += "#if KLAYGE_MAX_TEX_ARRAY_LEN > 1\n";
 				str += "Texture2DArray<" + elem_type + "> " + param_name + ";\n";
+				str += "#endif\n";
+				break;
+
+			case REDT_texture2DMSArray:
+				str += "#if KLAYGE_MAX_TEX_ARRAY_LEN > 1\n";
+				str += "Texture2DMSArray<" + elem_type + "> " + param_name + ";\n";
 				str += "#endif\n";
 				break;
 
@@ -3834,7 +3798,7 @@ namespace KlayGE
 		XMLAttributePtr inherit_attr = node->Attrib("inherit");
 		if (inherit_attr)
 		{
-			std::string const & inherit = inherit_attr->ValueString();
+			std::string_view const inherit = inherit_attr->ValueString();
 			BOOST_ASSERT(inherit != name_);
 
 			parent_tech = effect.TechniqueByName(inherit);
@@ -3875,8 +3839,8 @@ namespace KlayGE
 				}
 				for (; macro_node; macro_node = macro_node->NextSibling("macro"))
 				{
-					std::string name = macro_node->Attrib("name")->ValueString();
-					std::string value = macro_node->Attrib("value")->ValueString();
+					std::string_view const name = macro_node->Attrib("name")->ValueString();
+					std::string_view const value = macro_node->Attrib("value")->ValueString();
 					bool found = false;
 					for (size_t i = 0; i < macros_->size(); ++ i)
 					{
@@ -3961,10 +3925,10 @@ namespace KlayGE
 				{
 					++ weight_;
 
-					std::string state_name = state_node->Attrib("name")->ValueString();
+					std::string_view const state_name = state_node->Attrib("name")->ValueString();
 					if ("blend_enable" == state_name)
 					{
-						std::string value_str = state_node->Attrib("value")->ValueString();
+						std::string_view const value_str = state_node->Attrib("value")->ValueString();
 						if (BoolFromStr(value_str))
 						{
 							transparent_ = true;
@@ -4140,8 +4104,8 @@ namespace KlayGE
 				}
 				for (; macro_node; macro_node = macro_node->NextSibling("macro"))
 				{
-					std::string name = macro_node->Attrib("name")->ValueString();
-					std::string value = macro_node->Attrib("value")->ValueString();
+					std::string_view const name = macro_node->Attrib("name")->ValueString();
+					std::string_view const value = macro_node->Attrib("value")->ValueString();
 					bool found = false;
 					for (size_t i = 0; i < macros_->size(); ++ i)
 					{
@@ -4201,26 +4165,31 @@ namespace KlayGE
 
 		for (XMLNodePtr state_node = node->FirstNode("state"); state_node; state_node = state_node->NextSibling("state"))
 		{
-			std::string state_name = state_node->Attrib("name")->ValueString();
-			size_t const state_name_hash = RT_HASH(state_name.c_str());
+			std::string_view const name = state_node->Attrib("name")->ValueString();
+			size_t const state_name_hash = HashRange(name.begin(), name.end());
 
-			XMLAttributePtr value_attr = state_node->Attrib("value");
+			XMLAttributePtr const value_attr = state_node->Attrib("value");
+			std::string_view value_str;
+			if (value_attr)
+			{
+				value_str = value_attr->ValueString();
+			}
 
 			if (CT_HASH("polygon_mode") == state_name_hash)
 			{
-				rs_desc.polygon_mode = polygon_mode_define::instance().FromStr(value_attr->ValueString());
+				rs_desc.polygon_mode = PolygonModeFromName(value_str);
 			}
 			else if (CT_HASH("shade_mode") == state_name_hash)
 			{
-				rs_desc.shade_mode = shade_mode_define::instance().FromStr(value_attr->ValueString());
+				rs_desc.shade_mode = ShadeModeFromName(value_str);
 			}
 			else if (CT_HASH("cull_mode") == state_name_hash)
 			{
-				rs_desc.cull_mode = cull_mode_define::instance().FromStr(value_attr->ValueString());
+				rs_desc.cull_mode = CullModeFromName(value_str);
 			}
 			else if (CT_HASH("front_face_ccw") == state_name_hash)
 			{
-				rs_desc.front_face_ccw = BoolFromStr(value_attr->ValueString());
+				rs_desc.front_face_ccw = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("polygon_offset_factor") == state_name_hash)
 			{
@@ -4232,72 +4201,72 @@ namespace KlayGE
 			}
 			else if (CT_HASH("depth_clip_enable") == state_name_hash)
 			{
-				rs_desc.depth_clip_enable = BoolFromStr(value_attr->ValueString());
+				rs_desc.depth_clip_enable = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("scissor_enable") == state_name_hash)
 			{
-				rs_desc.scissor_enable = BoolFromStr(value_attr->ValueString());
+				rs_desc.scissor_enable = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("multisample_enable") == state_name_hash)
 			{
-				rs_desc.multisample_enable = BoolFromStr(value_attr->ValueString());
+				rs_desc.multisample_enable = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("alpha_to_coverage_enable") == state_name_hash)
 			{
-				bs_desc.alpha_to_coverage_enable = BoolFromStr(value_attr->ValueString());
+				bs_desc.alpha_to_coverage_enable = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("independent_blend_enable") == state_name_hash)
 			{
-				bs_desc.independent_blend_enable = BoolFromStr(value_attr->ValueString());
+				bs_desc.independent_blend_enable = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("blend_enable") == state_name_hash)
 			{
-				int index = get_index(state_node);
-				bs_desc.blend_enable[index] = BoolFromStr(value_attr->ValueString());
+				int index = get_index(*state_node);
+				bs_desc.blend_enable[index] = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("logic_op_enable") == state_name_hash)
 			{
-				int index = get_index(state_node);
-				bs_desc.logic_op_enable[index] = BoolFromStr(value_attr->ValueString());
+				int index = get_index(*state_node);
+				bs_desc.logic_op_enable[index] = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("blend_op") == state_name_hash)
 			{
-				int index = get_index(state_node);
-				bs_desc.blend_op[index] = blend_operation_define::instance().FromStr(value_attr->ValueString());
+				int index = get_index(*state_node);
+				bs_desc.blend_op[index] = BlendOperationFromName(value_str);
 			}
 			else if (CT_HASH("src_blend") == state_name_hash)
 			{
-				int index = get_index(state_node);
-				bs_desc.src_blend[index] = alpha_blend_factor_define::instance().FromStr(value_attr->ValueString());
+				int index = get_index(*state_node);
+				bs_desc.src_blend[index] = AlphaBlendFactorFromName(value_str);
 			}
 			else if (CT_HASH("dest_blend") == state_name_hash)
 			{
-				int index = get_index(state_node);
-				bs_desc.dest_blend[index] = alpha_blend_factor_define::instance().FromStr(value_attr->ValueString());
+				int index = get_index(*state_node);
+				bs_desc.dest_blend[index] = AlphaBlendFactorFromName(value_str);
 			}
 			else if (CT_HASH("blend_op_alpha") == state_name_hash)
 			{
-				int index = get_index(state_node);
-				bs_desc.blend_op_alpha[index] = blend_operation_define::instance().FromStr(value_attr->ValueString());
+				int index = get_index(*state_node);
+				bs_desc.blend_op_alpha[index] = BlendOperationFromName(value_str);
 			}
 			else if (CT_HASH("src_blend_alpha") == state_name_hash)
 			{
-				int index = get_index(state_node);
-				bs_desc.src_blend_alpha[index] = alpha_blend_factor_define::instance().FromStr(value_attr->ValueString());
+				int index = get_index(*state_node);
+				bs_desc.src_blend_alpha[index] = AlphaBlendFactorFromName(value_str);
 			}
 			else if (CT_HASH("dest_blend_alpha") == state_name_hash)
 			{
-				int index = get_index(state_node);
-				bs_desc.dest_blend_alpha[index] = alpha_blend_factor_define::instance().FromStr(value_attr->ValueString());
+				int index = get_index(*state_node);
+				bs_desc.dest_blend_alpha[index] = AlphaBlendFactorFromName(value_str);
 			}
 			else if (CT_HASH("logic_op") == state_name_hash)
 			{
-				int index = get_index(state_node);
-				bs_desc.logic_op[index] = logic_operation_define::instance().FromStr(value_attr->ValueString());
+				int index = get_index(*state_node);
+				bs_desc.logic_op[index] = LogicOperationFromName(value_str);
 			}
 			else if (CT_HASH("color_write_mask") == state_name_hash)
 			{
-				int index = get_index(state_node);
+				int index = get_index(*state_node);
 				bs_desc.color_write_mask[index] = static_cast<uint8_t>(value_attr->ValueUInt());
 			}
 			else if (CT_HASH("blend_factor") == state_name_hash)
@@ -4329,23 +4298,23 @@ namespace KlayGE
 			}
 			else if (CT_HASH("depth_enable") == state_name_hash)
 			{
-				dss_desc.depth_enable = BoolFromStr(value_attr->ValueString());
+				dss_desc.depth_enable = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("depth_write_mask") == state_name_hash)
 			{
-				dss_desc.depth_write_mask = BoolFromStr(value_attr->ValueString());
+				dss_desc.depth_write_mask = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("depth_func") == state_name_hash)
 			{
-				dss_desc.depth_func = compare_function_define::instance().FromStr(value_attr->ValueString());
+				dss_desc.depth_func = CompareFunctionFromName(value_str);
 			}
 			else if (CT_HASH("front_stencil_enable") == state_name_hash)
 			{
-				dss_desc.front_stencil_enable = BoolFromStr(value_attr->ValueString());
+				dss_desc.front_stencil_enable = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("front_stencil_func") == state_name_hash)
 			{
-				dss_desc.front_stencil_func = compare_function_define::instance().FromStr(value_attr->ValueString());
+				dss_desc.front_stencil_func = CompareFunctionFromName(value_str);
 			}
 			else if (CT_HASH("front_stencil_ref") == state_name_hash)
 			{
@@ -4361,23 +4330,23 @@ namespace KlayGE
 			}
 			else if (CT_HASH("front_stencil_fail") == state_name_hash)
 			{
-				dss_desc.front_stencil_fail = stencil_operation_define::instance().FromStr(value_attr->ValueString());
+				dss_desc.front_stencil_fail = StencilOperationFromName(value_str);
 			}
 			else if (CT_HASH("front_stencil_depth_fail") == state_name_hash)
 			{
-				dss_desc.front_stencil_depth_fail = stencil_operation_define::instance().FromStr(value_attr->ValueString());
+				dss_desc.front_stencil_depth_fail = StencilOperationFromName(value_str);
 			}
 			else if (CT_HASH("front_stencil_pass") == state_name_hash)
 			{
-				dss_desc.front_stencil_pass = stencil_operation_define::instance().FromStr(value_attr->ValueString());
+				dss_desc.front_stencil_pass = StencilOperationFromName(value_str);
 			}
 			else if (CT_HASH("back_stencil_enable") == state_name_hash)
 			{
-				dss_desc.back_stencil_enable = BoolFromStr(value_attr->ValueString());
+				dss_desc.back_stencil_enable = BoolFromStr(value_str);
 			}
 			else if (CT_HASH("back_stencil_func") == state_name_hash)
 			{
-				dss_desc.back_stencil_func = compare_function_define::instance().FromStr(value_attr->ValueString());
+				dss_desc.back_stencil_func = CompareFunctionFromName(value_str);
 			}
 			else if (CT_HASH("back_stencil_ref") == state_name_hash)
 			{
@@ -4393,15 +4362,15 @@ namespace KlayGE
 			}
 			else if (CT_HASH("back_stencil_fail") == state_name_hash)
 			{
-				dss_desc.back_stencil_fail = stencil_operation_define::instance().FromStr(value_attr->ValueString());
+				dss_desc.back_stencil_fail = StencilOperationFromName(value_str);
 			}
 			else if (CT_HASH("back_stencil_depth_fail") == state_name_hash)
 			{
-				dss_desc.back_stencil_depth_fail = stencil_operation_define::instance().FromStr(value_attr->ValueString());
+				dss_desc.back_stencil_depth_fail = StencilOperationFromName(value_str);
 			}
 			else if (CT_HASH("back_stencil_pass") == state_name_hash)
 			{
-				dss_desc.back_stencil_pass = stencil_operation_define::instance().FromStr(value_attr->ValueString());
+				dss_desc.back_stencil_pass = StencilOperationFromName(value_str);
 			}
 			else if ((CT_HASH("vertex_shader") == state_name_hash) || (CT_HASH("pixel_shader") == state_name_hash)
 				|| (CT_HASH("geometry_shader") == state_name_hash) || (CT_HASH("compute_shader") == state_name_hash)
@@ -4430,13 +4399,13 @@ namespace KlayGE
 				}
 				else
 				{
-					BOOST_ASSERT("domain_shader" == state_name);
+					BOOST_ASSERT(CT_HASH("domain_shader") == state_name_hash);
 					type = ShaderObject::ST_DomainShader;
 				}
 
 				ShaderDesc sd;
-				sd.profile = get_profile(state_node);
-				sd.func_name = get_func_name(state_node);
+				sd.profile = get_profile(*state_node);
+				sd.func_name = get_func_name(*state_node);
 				sd.macros_hash = macros_hash;
 
 				if ((ShaderObject::ST_VertexShader == type) || (ShaderObject::ST_GeometryShader == type))
@@ -4448,8 +4417,8 @@ namespace KlayGE
 						{
 							ShaderDesc::StreamOutputDecl decl;
 
-							std::string usage_str = entry_node->Attrib("usage")->ValueString();
-							size_t const usage_str_hash = RT_HASH(usage_str.c_str());
+							std::string_view const usage_str = entry_node->Attrib("usage")->ValueString();
+							size_t const usage_str_hash = HashRange(usage_str.begin(), usage_str.end());
 							XMLAttributePtr attr = entry_node->Attrib("usage_index");
 							if (attr)
 							{
@@ -4974,7 +4943,7 @@ namespace KlayGE
 #if KLAYGE_IS_DEV_PLATFORM
 	void RenderEffectParameter::Load(XMLNodePtr const & node)
 	{
-		type_ = type_define::instance().TypeCode(node->Attrib("type")->ValueString());
+		type_ = TypeCodeFromName(node->Attrib("type")->ValueString());
 		name_ = MakeSharedPtr<std::remove_reference<decltype(*name_)>::type>();
 		name_->first = node->Attrib("name")->ValueString();
 		name_->second = HashRange(name_->first.begin(), name_->first.end());
@@ -5002,7 +4971,7 @@ namespace KlayGE
 		{
 			as = 0;
 		}
-		var_ = read_var(node, type_, as);
+		var_ = read_var(*node, type_, as);
 
 		{
 			XMLNodePtr anno_node = node->FirstNode("annotation");
@@ -5017,8 +4986,10 @@ namespace KlayGE
 			}
 		}
 
-		if (annotations_ && ((REDT_texture1D == type_) || (REDT_texture2D == type_) || (REDT_texture3D == type_) || (REDT_textureCUBE == type_)
-			|| (REDT_texture1DArray == type_) || (REDT_texture2DArray == type_) || (REDT_texture3DArray == type_) || (REDT_textureCUBEArray == type_)))
+		if (annotations_ && ((REDT_texture1D == type_) || (REDT_texture2D == type_) || (REDT_texture2DMS == type_)
+			|| (REDT_texture3D == type_) || (REDT_textureCUBE == type_)
+			|| (REDT_texture1DArray == type_) || (REDT_texture2DArray == type_) || (REDT_texture2DMSArray == type_)
+			|| (REDT_texture3DArray == type_) || (REDT_textureCUBEArray == type_)))
 		{
 			for (size_t i = 0; i < annotations_->size(); ++ i)
 			{
@@ -5090,8 +5061,10 @@ namespace KlayGE
 			}
 		}
 
-		if (annotations_ && ((REDT_texture1D == type_) || (REDT_texture2D == type_) || (REDT_texture3D == type_) || (REDT_textureCUBE == type_)
-			|| (REDT_texture1DArray == type_) || (REDT_texture2DArray == type_) || (REDT_texture3DArray == type_) || (REDT_textureCUBEArray == type_)))
+		if (annotations_ && ((REDT_texture1D == type_) || (REDT_texture2D == type_) || (REDT_texture2DMS == type_)
+			|| (REDT_texture3D == type_) || (REDT_textureCUBE == type_)
+			|| (REDT_texture1DArray == type_) || (REDT_texture2DArray == type_) || (REDT_texture2DMSArray == type_)
+			|| (REDT_texture3DArray == type_) || (REDT_textureCUBEArray == type_)))
 		{
 			for (size_t i = 0; i < annotations_->size(); ++ i)
 			{
@@ -5226,8 +5199,8 @@ namespace KlayGE
 		XMLAttributePtr attr = node->Attrib("type");
 		if (attr)
 		{
-			std::string const & type_str = attr->ValueString();
-			size_t const type_str_hash = RT_HASH(type_str.c_str());
+			std::string_view const type_str = attr->ValueString();
+			size_t const type_str_hash = HashRange(type_str.begin(), type_str.end());
 			if (CT_HASH("vertex_shader") == type_str_hash)
 			{
 				type_ = ShaderObject::ST_VertexShader;

@@ -16,23 +16,23 @@
 #include <vector>
 #include <cstring>
 
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/algorithm/string/split.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
 #include <boost/algorithm/string/trim.hpp>
 
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/program_options.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
 
 using namespace std;
@@ -77,7 +77,7 @@ namespace
 	std::string const JIT_EXT_NAME = ".model_bin";
 
 	template <int N>
-	void ExtractFVector(std::string const & value_str, float* v)
+	void ExtractFVector(std::string_view value_str, float* v)
 	{
 		std::vector<std::string> strs;
 		boost::algorithm::split(strs, value_str, boost::is_any_of(" "));
@@ -96,7 +96,7 @@ namespace
 	}
 
 	template <int N>
-	void ExtractUIVector(std::string const & value_str, uint32_t* v)
+	void ExtractUIVector(std::string_view value_str, uint32_t* v)
 	{
 		std::vector<std::string> strs;
 		boost::algorithm::split(strs, value_str, boost::is_any_of(" "));
@@ -321,8 +321,8 @@ namespace
 				XMLAttributePtr attr = detail_node->Attrib("mode");
 				if (attr)
 				{
-					std::string const & mode_str = attr->ValueString();
-					size_t const mode_hash = RT_HASH(mode_str.c_str());
+					std::string_view const mode_str = attr->ValueString();
+					size_t const mode_hash = HashRange(mode_str.begin(), mode_str.end());
 					if (CT_HASH("Flat Tessellation") == mode_hash)
 					{
 						mtl.detail_mode = RenderMaterial::SDM_FlatTessellation;
@@ -464,27 +464,11 @@ namespace
 		}
 	}
 
-	void CompileMeshesVerticesChunk(XMLNodePtr const & vertices_chunk,
-		AABBox& pos_bb, AABBox& tc_bb, std::vector<VertexElement>& vertex_elements,
-		std::vector<int16_t>& positions, std::vector<uint32_t>& normals,
-		std::vector<uint32_t>& tangent_quats, 
-		std::vector<uint32_t>& diffuses, std::vector<uint32_t>& speculars,
-		std::vector<int16_t>& tex_coords, 
-		std::vector<uint32_t>& bone_indices, std::vector<uint32_t>& bone_weights)
+	void CompileMeshBoundingBox(XMLNodePtr const & mesh_node,
+		AABBox& pos_bb, AABBox& tc_bb,
+		bool& recompute_pos_bb, bool& recompute_tc_bb)
 	{
-		std::vector<float3> mesh_positions;
-		std::vector<float3> mesh_normals;
-		std::vector<float4> mesh_tangents;
-		std::vector<float3> mesh_binormals;
-		std::vector<Quaternion> mesh_tangent_quats;
-		std::vector<float4> mesh_diffuses;
-		std::vector<float3> mesh_speculars;
-		std::vector<float2> mesh_tex_coords;
-		std::vector<uint32_t> mesh_bone_indices;
-		std::vector<uint32_t> mesh_bone_weights;
-
-		bool recompute_pos_bb;
-		XMLNodePtr pos_bb_node = vertices_chunk->FirstNode("pos_bb");
+		XMLNodePtr pos_bb_node = mesh_node->FirstNode("pos_bb");
 		if (pos_bb_node)
 		{
 			float3 pos_min_bb, pos_max_bb;
@@ -525,8 +509,7 @@ namespace
 			recompute_pos_bb = true;
 		}
 
-		bool recompute_tc_bb;
-		XMLNodePtr tc_bb_node = vertices_chunk->FirstNode("tc_bb");
+		XMLNodePtr tc_bb_node = mesh_node->FirstNode("tc_bb");
 		if (tc_bb_node)
 		{
 			float3 tc_min_bb, tc_max_bb;
@@ -551,7 +534,7 @@ namespace
 				}
 				else
 				{
-					XMLNodePtr tc_max_node = tc_bb_node->FirstNode("max");							
+					XMLNodePtr tc_max_node = tc_bb_node->FirstNode("max");
 					tc_max_bb.x() = tc_max_node->Attrib("x")->ValueFloat();
 					tc_max_bb.y() = tc_max_node->Attrib("y")->ValueFloat();
 				}
@@ -567,6 +550,27 @@ namespace
 		{
 			recompute_tc_bb = true;
 		}
+	}
+
+	void CompileMeshesVerticesChunk(XMLNodePtr const & vertices_chunk,
+		AABBox& pos_bb, AABBox& tc_bb, bool recompute_pos_bb, bool recompute_tc_bb,
+		std::vector<VertexElement>& vertex_elements,
+		std::vector<int16_t>& positions, std::vector<uint32_t>& normals,
+		std::vector<uint32_t>& tangent_quats, 
+		std::vector<uint32_t>& diffuses, std::vector<uint32_t>& speculars,
+		std::vector<int16_t>& tex_coords, 
+		std::vector<uint32_t>& bone_indices, std::vector<uint32_t>& bone_weights)
+	{
+		std::vector<float3> mesh_positions;
+		std::vector<float3> mesh_normals;
+		std::vector<float4> mesh_tangents;
+		std::vector<float3> mesh_binormals;
+		std::vector<Quaternion> mesh_tangent_quats;
+		std::vector<float4> mesh_diffuses;
+		std::vector<float3> mesh_speculars;
+		std::vector<float2> mesh_tex_coords;
+		std::vector<uint32_t> mesh_bone_indices;
+		std::vector<uint32_t> mesh_bone_weights;
 
 		bool has_normal = false;
 		bool has_diffuse = false;
@@ -685,10 +689,12 @@ namespace
 				{
 					XMLAttributePtr weight_attr = weight_node->Attrib("weight");
 
+					std::string_view const index_str = attr->ValueString();
+					std::string_view const weight_str = weight_attr->ValueString();
 					std::vector<std::string> index_strs;
 					std::vector<std::string> weight_strs;
-					boost::algorithm::split(index_strs, attr->ValueString(), boost::is_any_of(" "));
-					boost::algorithm::split(weight_strs, weight_attr->ValueString(), boost::is_any_of(" "));
+					boost::algorithm::split(index_strs, index_str, boost::is_any_of(" "));
+					boost::algorithm::split(weight_strs, weight_str, boost::is_any_of(" "));
 					
 					for (num_blend = 0; num_blend < 4; ++ num_blend)
 					{
@@ -1312,8 +1318,56 @@ namespace
 		}
 	}
 
+	void CompileMeshLodChunk(XMLNodePtr const & lod_node, uint32_t mesh_index,
+		std::vector<AABBox>& pos_bbs, std::vector<AABBox>& tc_bbs, bool recompute_pos_bb, bool recompute_tc_bb,
+		std::vector<uint32_t>& mesh_num_vertices, std::vector<uint32_t>& mesh_base_vertices,
+		std::vector<uint32_t>& mesh_num_indices, std::vector<uint32_t>& mesh_start_indices,
+		std::vector<VertexElement>& merged_ves, std::vector<std::vector<uint8_t>>& merged_vertices,
+		std::vector<uint8_t>& merged_indices, char& is_index_16_bit)
+	{
+		std::vector<VertexElement> ves;
+		std::vector<int16_t> positions;
+		std::vector<uint32_t> normals;
+		std::vector<uint32_t> tangent_quats;
+		std::vector<uint32_t> diffuses;
+		std::vector<uint32_t> speculars;
+		std::vector<int16_t> tex_coords;
+		std::vector<uint32_t> bone_indices;
+		std::vector<uint32_t> bone_weights;
+
+		XMLNodePtr vertices_chunk = lod_node->FirstNode("vertices_chunk");
+		if (vertices_chunk)
+		{
+			CompileMeshesVerticesChunk(vertices_chunk,
+				pos_bbs[mesh_index], tc_bbs[mesh_index], recompute_pos_bb, recompute_tc_bb,
+				ves,
+				positions, normals, tangent_quats,
+				diffuses, speculars, tex_coords,
+				bone_indices, bone_weights);
+			AppendMeshVertices(ves,
+				positions, normals, tangent_quats,
+				diffuses, speculars, tex_coords,
+				bone_indices, bone_weights,
+				mesh_num_vertices, mesh_base_vertices,
+				merged_ves, merged_vertices);
+		}
+
+		std::vector<uint8_t> triangle_indices;
+
+		XMLNodePtr triangles_chunk = lod_node->FirstNode("triangles_chunk");
+		if (triangles_chunk)
+		{
+			char is_index_16s = true;
+			CompileMeshesTrianglesChunk(triangles_chunk,
+				triangle_indices, is_index_16s);
+			AppendMeshIndices(triangle_indices, is_index_16s,
+				mesh_num_indices, mesh_start_indices, merged_indices,
+				is_index_16_bit);
+		}
+	}
+
 	void CompileMeshesChunk(XMLNodePtr const & meshes_chunk,
-		std::vector<std::string>& mesh_names, std::vector<int32_t>& mtl_ids,
+		std::vector<std::string>& mesh_names, std::vector<int32_t>& mtl_ids, std::vector<uint32_t>& mesh_lods,
 		std::vector<AABBox>& pos_bbs, std::vector<AABBox>& tc_bbs, 
 		std::vector<uint32_t>& mesh_num_vertices, std::vector<uint32_t>& mesh_base_vertices,
 		std::vector<uint32_t>& mesh_num_indices, std::vector<uint32_t>& mesh_start_indices,
@@ -1322,6 +1376,7 @@ namespace
 	{
 		mesh_names.clear();
 		mtl_ids.clear();
+		mesh_lods.clear();
 
 		mesh_num_vertices.clear();
 		mesh_num_indices.clear();
@@ -1332,64 +1387,70 @@ namespace
 		merged_indices.clear();
 		is_index_16_bit = true;
 
-		std::vector<VertexElement> ves;
-		std::vector<int16_t> positions;
-		std::vector<uint32_t> normals;
-		std::vector<uint32_t> tangent_quats;
-		std::vector<uint32_t> diffuses;
-		std::vector<uint32_t> speculars;
-		std::vector<int16_t> tex_coords;
-		std::vector<uint32_t> bone_indices;
-		std::vector<uint32_t> bone_weights;
-		std::vector<uint8_t> triangle_indices;
-
 		uint32_t mesh_index = 0;
 		for (XMLNodePtr mesh_node = meshes_chunk->FirstNode("mesh"); mesh_node; mesh_node = mesh_node->NextSibling("mesh"), ++ mesh_index)
 		{
-			mesh_names.push_back(mesh_node->Attrib("name")->ValueString());
+			mesh_names.push_back(std::string(mesh_node->Attrib("name")->ValueString()));
 			mtl_ids.push_back(mesh_node->Attrib("mtl_id")->ValueInt());
 
 			pos_bbs.resize(mesh_index + 1);
 			tc_bbs.resize(pos_bbs.size());
 
-			ves.clear();
-			positions.clear();
-			normals.clear();
-			tangent_quats.clear();
-			diffuses.clear();
-			speculars.clear();
-			tex_coords.clear();
-			bone_indices.clear();
-			bone_weights.clear();
-
-			XMLNodePtr vertices_chunk = mesh_node->FirstNode("vertices_chunk");
-			if (vertices_chunk)
+			bool recompute_pos_bb, recompute_tc_bb;
+			CompileMeshBoundingBox(mesh_node, pos_bbs[mesh_index], tc_bbs[mesh_index], recompute_pos_bb, recompute_tc_bb);
+			if (recompute_pos_bb && recompute_tc_bb)
 			{
-				CompileMeshesVerticesChunk(vertices_chunk,
-					pos_bbs[mesh_index], tc_bbs[mesh_index], ves,
-					positions, normals,	tangent_quats,
-					diffuses, speculars, tex_coords,
-					bone_indices, bone_weights);
-				AppendMeshVertices(ves,
-					positions, normals, tangent_quats, 
-					diffuses, speculars, tex_coords, 
-					bone_indices, bone_weights,
+				XMLNodePtr vertices_chunk = mesh_node->FirstNode("vertices_chunk");
+				if (vertices_chunk)
+				{
+					CompileMeshBoundingBox(vertices_chunk, pos_bbs[mesh_index], tc_bbs[mesh_index], recompute_pos_bb, recompute_tc_bb);
+				}
+			}
+
+			uint32_t mesh_lod;
+
+			XMLNodePtr lod_node = mesh_node->FirstNode("lod");
+			if (lod_node)
+			{
+				mesh_lod = 0;
+
+				for (; lod_node; lod_node = lod_node->NextSibling("lod"))
+				{
+					++ mesh_lod;
+				}
+
+				std::vector<XMLNodePtr> lod_nodes(mesh_lod);
+				for (lod_node = mesh_node->FirstNode("lod"); lod_node; lod_node = lod_node->NextSibling("lod"))
+				{
+					uint32_t const lod = lod_node->Attrib("value")->ValueUInt();
+					lod_nodes[lod] = lod_node;
+				}
+
+				for (uint32_t lod = 0; lod < mesh_lod; ++ lod)
+				{
+					CompileMeshLodChunk(lod_nodes[lod], mesh_index,
+						pos_bbs, tc_bbs, recompute_pos_bb, recompute_tc_bb,
+						mesh_num_vertices, mesh_base_vertices,
+						mesh_num_indices, mesh_start_indices,
+						merged_ves, merged_vertices,
+						merged_indices, is_index_16_bit);
+
+					recompute_pos_bb = false;
+					recompute_tc_bb = false;
+				}
+			}
+			else
+			{
+				mesh_lod = 1;
+				CompileMeshLodChunk(mesh_node, mesh_index,
+					pos_bbs, tc_bbs, recompute_pos_bb, recompute_tc_bb,
 					mesh_num_vertices, mesh_base_vertices,
-					merged_ves, merged_vertices);
+					mesh_num_indices, mesh_start_indices,
+					merged_ves, merged_vertices,
+					merged_indices, is_index_16_bit);
 			}
 
-			triangle_indices.clear();
-
-			XMLNodePtr triangles_chunk = mesh_node->FirstNode("triangles_chunk");
-			if (triangles_chunk)
-			{
-				char is_index_16s = true;
-				CompileMeshesTrianglesChunk(triangles_chunk,
-					triangle_indices, is_index_16s);
-				AppendMeshIndices(triangle_indices, is_index_16s,
-					mesh_num_indices, mesh_start_indices, merged_indices,
-					is_index_16_bit);
-			}
+			mesh_lods.push_back(mesh_lod);
 		}
 
 		if (is_index_16_bit)
@@ -1912,6 +1973,7 @@ namespace
 		XMLNodePtr meshes_chunk = root->FirstNode("meshes_chunk");
 		std::vector<std::string> mesh_names;
 		std::vector<int32_t> mtl_ids;
+		std::vector<uint32_t> mesh_lods;
 		std::vector<AABBox> pos_bbs;
 		std::vector<AABBox> tc_bbs;
 		std::vector<uint32_t> mesh_num_vertices;
@@ -1924,7 +1986,7 @@ namespace
 		char is_index_16_bit = true;
 		if (meshes_chunk)
 		{
-			CompileMeshesChunk(meshes_chunk, mesh_names, mtl_ids, pos_bbs, tc_bbs,
+			CompileMeshesChunk(meshes_chunk, mesh_names, mtl_ids, mesh_lods, pos_bbs, tc_bbs,
 				mesh_num_vertices, mesh_base_vertices,
 				mesh_num_indices, mesh_start_indices,
 				merged_ves, merged_vertices, merged_indices,
@@ -1941,15 +2003,18 @@ namespace
 		XMLNodePtr key_frames_chunk = root->FirstNode("key_frames_chunk");
 		uint32_t num_frames = 0;
 		uint32_t frame_rate = 0;
-		std::vector<KeyFrames> kfs(joints.size());
-		std::vector<AABBKeyFrames> bb_kfs;
+		std::shared_ptr<std::vector<KeyFrames>> kfs;
 		if (key_frames_chunk)
 		{
-			CompileKeyFramesChunk(key_frames_chunk, num_frames, frame_rate, kfs);
+			kfs = MakeSharedPtr<KeyFramesType>(joints.size());
+			std::vector<AABBKeyFrames> bb_kfs;
 
-			for (size_t i = 0; i < kfs.size(); ++ i)
+			CompileKeyFramesChunk(key_frames_chunk, num_frames, frame_rate, *kfs);
+
+			for (size_t i = 0; i < kfs->size(); ++ i)
 			{
-				if (kfs[i].frame_id.empty())
+				auto& kf = (*kfs)[i];
+				if (kf.frame_id.empty())
 				{
 					Quaternion inv_parent_real;
 					Quaternion inv_parent_dual;
@@ -1967,11 +2032,11 @@ namespace
 						inv_parent_scale = 1 / joints[joints[i].parent].bind_scale;
 					}
 
-					kfs[i].frame_id.push_back(0);
-					kfs[i].bind_real.push_back(MathLib::mul_real(joints[i].bind_real, inv_parent_real));
-					kfs[i].bind_dual.push_back(MathLib::mul_dual(joints[i].bind_real, joints[i].bind_dual * inv_parent_scale,
+					kf.frame_id.push_back(0);
+					kf.bind_real.push_back(MathLib::mul_real(joints[i].bind_real, inv_parent_real));
+					kf.bind_dual.push_back(MathLib::mul_dual(joints[i].bind_real, joints[i].bind_dual * inv_parent_scale,
 						inv_parent_real, inv_parent_dual));
-					kfs[i].bind_scale.push_back(joints[i].bind_scale * inv_parent_scale);
+					kf.bind_scale.push_back(joints[i].bind_scale * inv_parent_scale);
 				}
 			}
 
@@ -1980,10 +2045,11 @@ namespace
 		}
 
 		XMLNodePtr actions_chunk = root->FirstNode("actions_chunk");
-		std::vector<AnimationAction> actions;
+		std::shared_ptr<std::vector<AnimationAction>> actions;
 		if (actions_chunk)
 		{
-			CompileActionsChunk(actions_chunk, num_frames, actions);
+			actions = MakeSharedPtr<std::vector<AnimationAction>>();
+			CompileActionsChunk(actions_chunk, num_frames, *actions);
 		}
 
 		std::vector<RenderMaterialPtr> output_mtls(mtls.size());
@@ -1992,9 +2058,9 @@ namespace
 			output_mtls[i] = MakeSharedPtr<RenderMaterial>(mtls[i].material);
 		}
 		SaveModel(output_name, output_mtls, merged_ves, is_index_16_bit, merged_vertices, merged_indices,
-			mesh_names, mtl_ids, pos_bbs, tc_bbs,
+			mesh_names, mtl_ids, mesh_lods, pos_bbs, tc_bbs,
 			mesh_num_vertices, mesh_base_vertices, mesh_num_indices, mesh_start_indices,
-			joints, MakeSharedPtr<std::vector<AnimationAction>>(actions), MakeSharedPtr<KeyFramesType>(kfs), num_frames, frame_rate);
+			joints, actions, kfs, num_frames, frame_rate);
 	}
 }
 
@@ -2056,44 +2122,55 @@ int main(int argc, char* argv[])
 		filesystem::path input_path(input_name);
 		std::string base_name = input_path.stem().string();
 		filesystem::path folder = input_path.parent_path();
-		meshml_name = (folder / filesystem::path(base_name)).string() + ".7z//" + base_name + ".meshml";
+		std::string package_name = (folder / filesystem::path(base_name)).string() + ".7z";
+		if (!ResLoader::Instance().Locate(package_name).empty())
+		{
+			meshml_name = package_name + "//" + base_name + ".meshml";
+		}
 	}
 
-	std::string::size_type const pkt_offset(meshml_name.find("//"));
-	std::string file_name;
-	if (pkt_offset != std::string::npos)
+	if (meshml_name.empty())
 	{
-		std::string pkt_name = meshml_name.substr(0, pkt_offset);
-		std::string::size_type const password_offset = pkt_name.find("|");
-		if (password_offset != std::string::npos)
-		{
-			pkt_name = pkt_name.substr(0, password_offset - 1);
-		}
-
-		if (target_folder.empty())
-		{
-			target_folder = filesystem::path(pkt_name).parent_path();
-		}
-
-		file_name = meshml_name.substr(pkt_offset + 2);
+		cout << "Couldn't locate " << input_name << endl;
 	}
 	else
 	{
-		filesystem::path meshml_path(meshml_name);
-		if (target_folder.empty())
+		std::string::size_type const pkt_offset(meshml_name.find("//"));
+		std::string file_name;
+		if (pkt_offset != std::string::npos)
 		{
-			target_folder = meshml_path.parent_path();
+			std::string pkt_name = meshml_name.substr(0, pkt_offset);
+			std::string::size_type const password_offset = pkt_name.find("|");
+			if (password_offset != std::string::npos)
+			{
+				pkt_name = pkt_name.substr(0, password_offset - 1);
+			}
+
+			if (target_folder.empty())
+			{
+				target_folder = filesystem::path(pkt_name).parent_path();
+			}
+
+			file_name = meshml_name.substr(pkt_offset + 2);
 		}
-		file_name = meshml_path.filename().string();
-	}
+		else
+		{
+			filesystem::path meshml_path(meshml_name);
+			if (target_folder.empty())
+			{
+				target_folder = meshml_path.parent_path();
+			}
+			file_name = meshml_path.filename().string();
+		}
 
-	std::string output_name = (target_folder / filesystem::path(file_name)).string() + JIT_EXT_NAME;
+		std::string output_name = (target_folder / filesystem::path(file_name)).string() + JIT_EXT_NAME;
 
-	MeshMLJIT(meshml_name, output_name, platform);
+		MeshMLJIT(meshml_name, output_name, platform);
 
-	if (!quiet)
-	{
-		cout << "Binary model has been saved to " << output_name << "." << endl;
+		if (!quiet)
+		{
+			cout << "Binary model has been saved to " << output_name << "." << endl;
+		}
 	}
 
 	Context::Destroy();

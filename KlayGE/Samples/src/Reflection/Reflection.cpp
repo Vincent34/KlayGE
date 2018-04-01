@@ -35,8 +35,6 @@ namespace
 		ReflectMesh(RenderModelPtr const & model, std::wstring const & name)
 			: StaticMesh(model, name)
 		{
-			this->BindDeferredEffect(SyncLoadRenderEffect("Reflection.fxml"));
-			technique_ = special_shading_tech_;
 		}
 
 		virtual void DoBuildMeshInfo() override
@@ -46,6 +44,9 @@ namespace
 			mtl_ = SyncLoadRenderMaterial("ReflectMesh.mtlml");
 
 			effect_attrs_ |= EA_Reflection;
+
+			this->BindDeferredEffect(SyncLoadRenderEffect("Reflection.fxml"));
+			technique_ = special_shading_tech_;
 
 			reflection_tech_ = effect_->TechniqueByName("ReflectReflectionTech");
 			reflection_alpha_blend_back_tech_ = reflection_tech_;
@@ -252,7 +253,11 @@ void ScreenSpaceReflectionApp::OnCreate()
 	actionMap.AddActions(actions, actions + std::size(actions));
 
 	action_handler_t input_handler = MakeSharedPtr<input_signal>();
-	input_handler->connect(std::bind(&ScreenSpaceReflectionApp::InputHandler, this, std::placeholders::_1, std::placeholders::_2));
+	input_handler->connect(
+		[this](InputEngine const & sender, InputAction const & action)
+		{
+			this->InputHandler(sender, action);
+		});
 	inputEngine.ActionMap(actionMap, input_handler);
 
 	UIManager::Instance().Load(ResLoader::Instance().Open("Reflection.uiml"));
@@ -260,16 +265,28 @@ void ScreenSpaceReflectionApp::OnCreate()
 
 	id_min_sample_num_static_ = parameter_dialog_->IDFromName("min_sample_num_static");
 	id_min_sample_num_slider_ = parameter_dialog_->IDFromName("min_sample_num_slider");
-	parameter_dialog_->Control<UISlider>(id_min_sample_num_slider_)->OnValueChangedEvent().connect(std::bind(&ScreenSpaceReflectionApp::MinSampleNumHandler, this, std::placeholders::_1));
+	parameter_dialog_->Control<UISlider>(id_min_sample_num_slider_)->OnValueChangedEvent().connect(
+		[this](UISlider const & sender)
+		{
+			this->MinSampleNumHandler(sender);
+		});
 	this->MinSampleNumHandler(*(parameter_dialog_->Control<UISlider>(id_min_sample_num_slider_)));
 
 	id_max_sample_num_static_ = parameter_dialog_->IDFromName("max_sample_num_static");
 	id_max_sample_num_slider_ = parameter_dialog_->IDFromName("max_sample_num_slider");
-	parameter_dialog_->Control<UISlider>(id_max_sample_num_slider_)->OnValueChangedEvent().connect(std::bind(&ScreenSpaceReflectionApp::MaxSampleNumHandler, this, std::placeholders::_1));
+	parameter_dialog_->Control<UISlider>(id_max_sample_num_slider_)->OnValueChangedEvent().connect(
+		[this](UISlider const & sender)
+		{
+			this->MaxSampleNumHandler(sender);
+		});
 	this->MaxSampleNumHandler(*(parameter_dialog_->Control<UISlider>(id_max_sample_num_slider_)));
 
 	id_enable_reflection_ = parameter_dialog_->IDFromName("enable_reflection");
-	parameter_dialog_->Control<UICheckBox>(id_enable_reflection_)->OnChangedEvent().connect(std::bind(&ScreenSpaceReflectionApp::EnbleReflectionHandler, this, std::placeholders::_1));
+	parameter_dialog_->Control<UICheckBox>(id_enable_reflection_)->OnChangedEvent().connect(
+		[this](UICheckBox const & sender)
+		{
+			this->EnbleReflectionHandler(sender);
+		});
 	this->EnbleReflectionHandler(*(parameter_dialog_->Control<UICheckBox>(id_enable_reflection_)));
 }
 

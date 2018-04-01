@@ -44,16 +44,23 @@
 
 #include <fstream>
 
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/algorithm/string/split.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
 #include <boost/algorithm/string/trim.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/lexical_cast.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
 
 #include <KlayGE/ParticleSystem.hpp>
 
@@ -146,8 +153,9 @@ namespace
 						XMLAttributePtr attr = color_node->Attrib("from");
 						if (attr)
 						{
+							std::string_view const value_str = attr->ValueString();
 							std::vector<std::string> strs;
-							boost::algorithm::split(strs, attr->ValueString(), boost::is_any_of(" "));
+							boost::algorithm::split(strs, value_str, boost::is_any_of(" "));
 							for (size_t i = 0; i < 3; ++ i)
 							{
 								if (i < strs.size())
@@ -168,8 +176,9 @@ namespace
 						attr = color_node->Attrib("to");
 						if (attr)
 						{
+							std::string_view const value_str = attr->ValueString();
 							std::vector<std::string> strs;
-							boost::algorithm::split(strs, attr->ValueString(), boost::is_any_of(" "));
+							boost::algorithm::split(strs, value_str, boost::is_any_of(" "));
 							for (size_t i = 0; i < 3; ++ i)
 							{
 								if (i < strs.size())
@@ -223,8 +232,9 @@ namespace
 					XMLAttributePtr attr = pos_node->Attrib("min");
 					if (attr)
 					{
+						std::string_view const value_str = attr->ValueString();
 						std::vector<std::string> strs;
-						boost::algorithm::split(strs, attr->ValueString(), boost::is_any_of(" "));
+						boost::algorithm::split(strs, value_str, boost::is_any_of(" "));
 						for (size_t i = 0; i < 3; ++ i)
 						{
 							if (i < strs.size())
@@ -244,8 +254,9 @@ namespace
 					attr = pos_node->Attrib("max");
 					if (attr)
 					{
+						std::string_view const value_str = attr->ValueString();
 						std::vector<std::string> strs;
-						boost::algorithm::split(strs, attr->ValueString(), boost::is_any_of(" "));
+						boost::algorithm::split(strs, value_str, boost::is_any_of(" "));
 						for (size_t i = 0; i < 3; ++ i)
 						{
 							if (i < strs.size())
@@ -310,7 +321,8 @@ namespace
 						}
 
 						XMLAttributePtr attr = node->Attrib("name");
-						size_t const name_hash = RT_HASH(attr->ValueString().c_str());
+						std::string_view const name = attr->ValueString();
+						size_t const name_hash = HashRange(name.begin(), name.end());
 						if (CT_HASH("size_over_life") == name_hash)
 						{
 							ps_desc_.ps_data->size_over_life_ctrl_pts = xys;
@@ -549,15 +561,6 @@ namespace
 
 		using RenderableHelper::PosBound;
 	};
-
-	class ParticleCmp
-	{
-	public:
-		bool operator()(std::pair<uint32_t, float> const & lhs, std::pair<uint32_t, float> const & rhs) const
-		{
-			return lhs.second > rhs.second;
-		}
-	};
 }
 
 namespace KlayGE
@@ -715,6 +718,18 @@ namespace KlayGE
 		updaters_.clear();
 	}
 
+	uint32_t ParticleSystem::NumActiveParticles() const
+	{
+		std::lock_guard<std::mutex> lock(actived_particles_mutex_);
+		return static_cast<uint32_t>(actived_particles_.size());
+	}
+
+	uint32_t ParticleSystem::GetActiveParticleIndex(uint32_t i) const
+	{
+		std::lock_guard<std::mutex> lock(actived_particles_mutex_);
+		return actived_particles_[i].first;
+	}
+
 	void ParticleSystem::ClearParticles()
 	{
 		for (auto& particle : particles_)
@@ -723,17 +738,18 @@ namespace KlayGE
 		}
 	}
 
-	void ParticleSystem::SubThreadUpdate(float /*app_time*/, float elapsed_time)
+	void ParticleSystem::UpdateParticlesNoLock(float elapsed_time, std::vector<std::pair<uint32_t, float>>& actived_particles)
 	{
 		auto emitter_iter = emitters_.begin();
 		uint32_t new_particle = (*emitter_iter)->Update(elapsed_time);
 
 		float4x4 const & view_mat = Context::Instance().AppInstance().ActiveCamera().ViewMatrix();
-		std::vector<std::pair<uint32_t, float>> active_particles;
+
+		actived_particles.clear();
 
 		float3 min_bb(+1e10f, +1e10f, +1e10f);
 		float3 max_bb(-1e10f, -1e10f, -1e10f);
-		
+
 		for (uint32_t i = 0; i < particles_.size(); ++ i)
 		{
 			Particle& particle = particles_[i];
@@ -775,36 +791,31 @@ namespace KlayGE
 				float p_to_v = (pos.x() * view_mat(0, 2) + pos.y() * view_mat(1, 2) + pos.z() * view_mat(2, 2) + view_mat(3, 2))
 					/ (pos.x() * view_mat(0, 3) + pos.y() * view_mat(1, 3) + pos.z() * view_mat(2, 3) + view_mat(3, 3));
 
-				active_particles.emplace_back(i, p_to_v);
+				actived_particles.emplace_back(i, p_to_v);
 
 				min_bb = MathLib::minimize(min_bb, pos);
 				max_bb = MathLib::maximize(min_bb, pos);
 			}
 		}
 
-		if (!active_particles.empty())
+		if (!actived_particles.empty())
 		{
-			std::sort(active_particles.begin(), active_particles.end(), ParticleCmp());
+			std::sort(actived_particles.begin(), actived_particles.end(),
+				[](std::pair<uint32_t, float> const & lhs, std::pair<uint32_t, float> const & rhs)
+				{
+					return lhs.second > rhs.second;
+				});
 
 			checked_pointer_cast<RenderParticles>(renderable_)->PosBound(AABBox(min_bb, max_bb));
 		}
-
-		std::lock_guard<std::mutex> lock(update_mutex_);
-		active_particles_ = active_particles;
 	}
 
-	bool ParticleSystem::MainThreadUpdate(float app_time, float elapsed_time)
+	void ParticleSystem::UpdateParticleBufferNoLock(std::vector<std::pair<uint32_t, float>> const & actived_particles)
 	{
-		KFL_UNUSED(app_time);
-		KFL_UNUSED(elapsed_time);
-
-		std::lock_guard<std::mutex> lock(update_mutex_);
-
-		uint32_t const num_active_particles = static_cast<uint32_t>(active_particles_.size());
-
-		RenderLayout& rl = renderable_->GetRenderLayout();
-		if (!active_particles_.empty())
+		if (!actived_particles.empty())
 		{
+			RenderLayout& rl = renderable_->GetRenderLayout();
+
 			GraphicsBufferPtr instance_gb;
 			if (gs_support_)
 			{
@@ -815,6 +826,7 @@ namespace KlayGE
 				instance_gb = rl.InstanceStream();
 			}
 
+			uint32_t const num_active_particles = static_cast<uint32_t>(actived_particles.size());
 			uint32_t const new_instance_size = num_active_particles * sizeof(ParticleInstance);
 			if (!instance_gb || (instance_gb->Size() < new_instance_size))
 			{
@@ -849,7 +861,7 @@ namespace KlayGE
 				ParticleInstance* instance_data = mapper.Pointer<ParticleInstance>();
 				for (uint32_t i = 0; i < num_active_particles; ++ i, ++ instance_data)
 				{
-					Particle const & par = particles_[active_particles_[i].first];
+					Particle const & par = particles_[actived_particles[i].first];
 					instance_data->pos = par.pos;
 					instance_data->life = par.life;
 					instance_data->spin = par.spin;
@@ -858,6 +870,36 @@ namespace KlayGE
 					instance_data->alpha = par.alpha;
 				}
 			}
+		}
+	}
+
+	void ParticleSystem::SubThreadUpdate(float app_time, float elapsed_time)
+	{
+		KFL_UNUSED(app_time);
+
+		std::lock_guard<std::mutex> lock(actived_particles_mutex_);
+
+		this->UpdateParticlesNoLock(elapsed_time, actived_particles_);
+
+		auto& rf = Context::Instance().RenderFactoryInstance();
+		auto const & caps = rf.RenderEngineInstance().DeviceCaps();
+		if (caps.arbitrary_multithread_rendering_support)
+		{
+			this->UpdateParticleBufferNoLock(actived_particles_);
+		}
+	}
+
+	bool ParticleSystem::MainThreadUpdate(float app_time, float elapsed_time)
+	{
+		KFL_UNUSED(app_time);
+		KFL_UNUSED(elapsed_time);
+
+		auto& rf = Context::Instance().RenderFactoryInstance();
+		auto const & caps = rf.RenderEngineInstance().DeviceCaps();
+		if (!caps.arbitrary_multithread_rendering_support)
+		{
+			std::lock_guard<std::mutex> lock(actived_particles_mutex_);
+			this->UpdateParticleBufferNoLock(actived_particles_);
 		}
 
 		return false;

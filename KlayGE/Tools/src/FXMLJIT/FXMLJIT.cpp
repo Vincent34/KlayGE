@@ -40,21 +40,28 @@
 
 #include <iostream>
 
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/algorithm/string/case_conv.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/algorithm/string/split.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
 #include <boost/algorithm/string/classification.hpp>
 
 using namespace std;
 using namespace KlayGE;
 
-uint32_t const KFX_VERSION = 0x0110;
+uint32_t const KFX_VERSION = 0x0140;
 
 #ifdef KLAYGE_HAS_STRUCT_PACK
 #pragma pack(push, 1)
@@ -109,7 +116,7 @@ std::string RetrieveAttrValue(XMLNodePtr node, std::string const & attr_name, st
 	XMLAttributePtr attr = node->Attrib(attr_name);
 	if (attr)
 	{
-		return attr->ValueString();
+		return std::string(attr->ValueString());
 	}
 
 	return default_value;
@@ -232,6 +239,15 @@ int main(int argc, char* argv[])
 	device_caps.ds_support = plat.ds_support;
 
 	std::vector<ElementFormat> texture_format;
+	texture_format.push_back(EF_R8);
+	texture_format.push_back(EF_ABGR8);
+	texture_format.push_back(EF_ARGB8);
+	texture_format.push_back(EF_BC1);
+	texture_format.push_back(EF_BC1_SRGB);
+	texture_format.push_back(EF_BC2);
+	texture_format.push_back(EF_BC2_SRGB);
+	texture_format.push_back(EF_BC3);
+	texture_format.push_back(EF_BC3_SRGB);
 	if (plat.bc4_support)
 	{
 		texture_format.push_back(EF_BC4);
@@ -241,6 +257,17 @@ int main(int argc, char* argv[])
 	{
 		texture_format.push_back(EF_BC5);
 		texture_format.push_back(EF_BC5_SRGB);
+	}
+
+	std::vector<ElementFormat> uav_format;
+	if (device_caps.max_shader_model >= ShaderModel(5, 1))
+	{
+		uav_format.push_back(EF_ABGR16F);
+		uav_format.push_back(EF_B10G11R11F);
+		uav_format.push_back(EF_ABGR8);
+		uav_format.push_back(EF_R16UI);
+		uav_format.push_back(EF_R32UI);
+		uav_format.push_back(EF_R32F);
 	}
 
 	RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
@@ -255,6 +282,7 @@ int main(int argc, char* argv[])
 	re.SetCustomAttrib("REQUIRES_FLIPPING", &plat.requires_flipping);
 	re.SetCustomAttrib("DEVICE_CAPS", &device_caps);
 	re.SetCustomAttrib("TEXTURE_FORMAT", &texture_format);
+	re.SetCustomAttrib("UAV_FORMAT", &uav_format);
 	re.SetCustomAttrib("FRAG_DEPTH_SUPPORT", &frag_depth_support);
 
 	std::string fxml_name(argv[2]);

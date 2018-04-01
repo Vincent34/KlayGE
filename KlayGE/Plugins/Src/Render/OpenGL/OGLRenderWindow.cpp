@@ -38,7 +38,14 @@
 #include <map>
 #include <system_error>
 #include <boost/assert.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/lexical_cast.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
 
 #include <glloader/glloader.h>
 
@@ -58,10 +65,16 @@ namespace KlayGE
 		color_bits_ = NumFormatBits(settings.color_fmt);
 
 		WindowPtr const & main_wnd = Context::Instance().AppInstance().MainWnd();
-		on_exit_size_move_connect_ = main_wnd->OnExitSizeMove().connect(std::bind(&OGLRenderWindow::OnExitSizeMove, this,
-			std::placeholders::_1));
-		on_size_connect_ = main_wnd->OnSize().connect(std::bind(&OGLRenderWindow::OnSize, this,
-			std::placeholders::_1, std::placeholders::_2));
+		on_exit_size_move_connect_ = main_wnd->OnExitSizeMove().connect(
+			[this](Window const & win)
+			{
+				this->OnExitSizeMove(win);
+			});
+		on_size_connect_ = main_wnd->OnSize().connect(
+			[this](Window const & win, bool active)
+			{
+				this->OnSize(win, active);
+			});
 
 		static std::pair<int, int> constexpr all_versions[] =
 		{

@@ -806,7 +806,12 @@ void GPUParticleSystemApp::OnCreate()
 	use_cs = caps.cs_support && (caps.max_shader_model >= ShaderModel(5, 0));
 	if (use_cs)
 	{
+#ifdef KLAYGE_PLATFORM_WINDOWS_STORE
+		// Shaders are compiled to d3d11_0 for Windows store apps. No typed UAV support.
+		use_typed_uav = false;
+#else
 		use_typed_uav = caps.uav_format_support(EF_ABGR16F);
+#endif
 	}
 	else
 	{
@@ -830,7 +835,11 @@ void GPUParticleSystemApp::OnCreate()
 	actionMap.AddActions(actions, actions + std::size(actions));
 
 	action_handler_t input_handler = MakeSharedPtr<input_signal>();
-	input_handler->connect(std::bind(&GPUParticleSystemApp::InputHandler, this, std::placeholders::_1, std::placeholders::_2));
+	input_handler->connect(
+		[this](InputEngine const & sender, InputAction const & action)
+		{
+			this->InputHandler(sender, action);
+		});
 	inputEngine.ActionMap(actionMap, input_handler);
 
 	particles_ = MakeSharedPtr<ParticlesObject>(NUM_PARTICLE);

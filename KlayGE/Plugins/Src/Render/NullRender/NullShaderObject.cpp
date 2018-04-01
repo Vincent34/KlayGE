@@ -36,10 +36,18 @@
 #include <KlayGE/RenderFactory.hpp>
 #include <KlayGE/RenderEffect.hpp>
 #include <KFL/Hash.hpp>
+#include <KFL/ResIdentifier.hpp>
 
 #include <sstream>
 
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/lexical_cast.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
 
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 #include <KlayGE/SALWrapper.hpp>
@@ -126,10 +134,18 @@ namespace KlayGE
 	bool NullShaderObject::StreamIn(ResIdentifierPtr const & res, ShaderType type, RenderEffect const & effect,
 		std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 	{
-		KFL_UNUSED(res);
 		KFL_UNUSED(type);
 		KFL_UNUSED(effect);
 		KFL_UNUSED(shader_desc_ids);
+
+		uint32_t len;
+		res->read(&len, sizeof(len));
+		len = LE2Native(len);
+		if (len > 0)
+		{
+			res->seekg(len, std::ios_base::cur);
+		}
+
 		return true;
 	}
 
@@ -227,7 +243,7 @@ namespace KlayGE
 
 			uint16_t cb_desc_size = Native2LE(static_cast<uint16_t>(sd.cb_desc.size()));
 			oss.write(reinterpret_cast<char const *>(&cb_desc_size), sizeof(cb_desc_size));
-			for (size_t i = 0; i < sd.cb_desc.size(); ++i)
+			for (size_t i = 0; i < sd.cb_desc.size(); ++ i)
 			{
 				len = static_cast<uint8_t>(sd.cb_desc[i].name.size());
 				oss.write(reinterpret_cast<char const *>(&len), sizeof(len));
@@ -238,7 +254,7 @@ namespace KlayGE
 
 				uint16_t var_desc_size = Native2LE(static_cast<uint16_t>(sd.cb_desc[i].var_desc.size()));
 				oss.write(reinterpret_cast<char const *>(&var_desc_size), sizeof(var_desc_size));
-				for (size_t j = 0; j < sd.cb_desc[i].var_desc.size(); ++j)
+				for (size_t j = 0; j < sd.cb_desc[i].var_desc.size(); ++ j)
 				{
 					len = static_cast<uint8_t>(sd.cb_desc[i].var_desc[j].name.size());
 					oss.write(reinterpret_cast<char const *>(&len), sizeof(len));
@@ -264,7 +280,7 @@ namespace KlayGE
 
 			uint16_t res_desc_size = Native2LE(static_cast<uint16_t>(sd.res_desc.size()));
 			oss.write(reinterpret_cast<char const *>(&res_desc_size), sizeof(res_desc_size));
-			for (size_t i = 0; i < sd.res_desc.size(); ++i)
+			for (size_t i = 0; i < sd.res_desc.size(); ++ i)
 			{
 				len = static_cast<uint8_t>(sd.res_desc[i].name.size());
 				oss.write(reinterpret_cast<char const *>(&len), sizeof(len));
@@ -1204,9 +1220,9 @@ namespace KlayGE
 						ogl_so_template->pnames_[type] = MakeSharedPtr<std::vector<std::string>>();
 						ogl_so_template->glsl_res_names_[type] = MakeSharedPtr<std::vector<std::string>>();
 
-						for (uint32_t i = 0; i < dxbc2glsl.NumCBuffers(); ++i)
+						for (uint32_t i = 0; i < dxbc2glsl.NumCBuffers(); ++ i)
 						{
-							for (uint32_t j = 0; j < dxbc2glsl.NumVariables(i); ++j)
+							for (uint32_t j = 0; j < dxbc2glsl.NumVariables(i); ++ j)
 							{
 								if (dxbc2glsl.VariableUsed(i, j))
 								{
@@ -1218,7 +1234,7 @@ namespace KlayGE
 
 						std::vector<char const *> tex_names;
 						std::vector<char const *> sampler_names;
-						for (uint32_t i = 0; i < dxbc2glsl.NumResources(); ++i)
+						for (uint32_t i = 0; i < dxbc2glsl.NumResources(); ++ i)
 						{
 							if (dxbc2glsl.ResourceUsed(i))
 							{
@@ -1243,14 +1259,14 @@ namespace KlayGE
 							}
 						}
 
-						for (size_t i = 0; i < tex_names.size(); ++i)
+						for (size_t i = 0; i < tex_names.size(); ++ i)
 						{
 							auto param = effect.ParameterByName(tex_names[i]);
-							for (size_t j = 0; j < sampler_names.size(); ++j)
+							for (size_t j = 0; j < sampler_names.size(); ++ j)
 							{
 								std::string combined_sampler_name = std::string(tex_names[i]) + "_" + sampler_names[j];
 								bool found = false;
-								for (uint32_t k = 0; k < gl_tex_sampler_binds_.size(); ++k)
+								for (uint32_t k = 0; k < gl_tex_sampler_binds_.size(); ++ k)
 								{
 									if (std::get<0>(gl_tex_sampler_binds_[k]) == combined_sampler_name)
 									{
@@ -1272,7 +1288,7 @@ namespace KlayGE
 
 						if (ST_VertexShader == type)
 						{
-							for (uint32_t i = 0; i < dxbc2glsl.NumInputParams(); ++i)
+							for (uint32_t i = 0; i < dxbc2glsl.NumInputParams(); ++ i)
 							{
 								if (dxbc2glsl.InputParam(i).mask != 0)
 								{
@@ -1464,13 +1480,13 @@ namespace KlayGE
 				ogl_so_template->ds_output_primitive_ = ogl_so_so_template->ds_output_primitive_;
 			}
 
-			for (uint32_t j = 0; j < so->gl_tex_sampler_binds_.size(); ++j)
+			for (uint32_t j = 0; j < so->gl_tex_sampler_binds_.size(); ++ j)
 			{
 				if (std::get<3>(so->gl_tex_sampler_binds_[j]) | (1UL << type))
 				{
 					std::string const & combined_sampler_name = std::get<0>(so->gl_tex_sampler_binds_[j]);
 					bool found = false;
-					for (uint32_t k = 0; k < gl_tex_sampler_binds_.size(); ++k)
+					for (uint32_t k = 0; k < gl_tex_sampler_binds_.size(); ++ k)
 					{
 						if (std::get<0>(gl_tex_sampler_binds_[k]) == combined_sampler_name)
 						{

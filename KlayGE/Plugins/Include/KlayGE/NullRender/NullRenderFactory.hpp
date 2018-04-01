@@ -1,5 +1,5 @@
 /**
- * @file NullRenderFactory.hpp
+ * @file NullRenderFactoryInternal.hpp
  * @author Minmin Gong
  *
  * @section DESCRIPTION
@@ -34,16 +34,84 @@
 #pragma once
 
 #include <KlayGE/PreDeclare.hpp>
+#include <KlayGE/RenderFactory.hpp>
 
-#ifdef KLAYGE_NULL_RE_SOURCE				// Build dll
-	#define KLAYGE_NULL_RE_API KLAYGE_SYMBOL_EXPORT
-#else										// Use dll
-	#define KLAYGE_NULL_RE_API KLAYGE_SYMBOL_IMPORT
-#endif
-
-extern "C"
+namespace KlayGE
 {
-	KLAYGE_NULL_RE_API void MakeRenderFactory(std::unique_ptr<KlayGE::RenderFactory>& ptr);
+	class NullRenderFactory : public RenderFactory
+	{
+	public:
+		NullRenderFactory();
+
+		std::wstring const & Name() const override;
+
+		TexturePtr MakeDelayCreationTexture1D(uint32_t width, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint) override;
+		TexturePtr MakeDelayCreationTexture2D(uint32_t width, uint32_t height, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint) override;
+		TexturePtr MakeDelayCreationTexture3D(uint32_t width, uint32_t height, uint32_t depth, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint) override;
+		TexturePtr MakeDelayCreationTextureCube(uint32_t size, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint) override;
+
+		FrameBufferPtr MakeFrameBuffer() override;
+
+		RenderLayoutPtr MakeRenderLayout() override;
+
+		GraphicsBufferPtr MakeDelayCreationVertexBuffer(BufferUsage usage, uint32_t access_hint,
+			uint32_t size_in_byte, ElementFormat fmt = EF_Unknown) override;
+		GraphicsBufferPtr MakeDelayCreationIndexBuffer(BufferUsage usage, uint32_t access_hint,
+			uint32_t size_in_byte, ElementFormat fmt = EF_Unknown) override;
+		GraphicsBufferPtr MakeDelayCreationConstantBuffer(BufferUsage usage, uint32_t access_hint,
+			uint32_t size_in_byte, ElementFormat fmt = EF_Unknown) override;
+
+		QueryPtr MakeOcclusionQuery() override;
+		QueryPtr MakeConditionalRender() override;
+		QueryPtr MakeTimerQuery() override;
+		QueryPtr MakeSOStatisticsQuery() override;
+
+		FencePtr MakeFence() override;
+
+		RenderViewPtr Make1DRenderView(Texture& texture, int first_array_index, int array_size, int level) override;
+		RenderViewPtr Make2DRenderView(Texture& texture, int first_array_index, int array_size, int level) override;
+		RenderViewPtr Make2DRenderView(Texture& texture, int array_index, Texture::CubeFaces face, int level) override;
+		RenderViewPtr Make2DRenderView(Texture& texture, int array_index, uint32_t slice, int level) override;
+		RenderViewPtr MakeCubeRenderView(Texture& texture, int array_index, int level) override;
+		RenderViewPtr Make3DRenderView(Texture& texture, int array_index, uint32_t first_slice, uint32_t num_slices, int level) override;
+		RenderViewPtr MakeGraphicsBufferRenderView(GraphicsBuffer& gbuffer, uint32_t width, uint32_t height, ElementFormat pf) override;
+		RenderViewPtr Make2DDepthStencilRenderView(uint32_t width, uint32_t height, ElementFormat pf,
+			uint32_t sample_count, uint32_t sample_quality) override;
+		RenderViewPtr Make1DDepthStencilRenderView(Texture& texture, int first_array_index, int array_size, int level) override;
+		RenderViewPtr Make2DDepthStencilRenderView(Texture& texture, int first_array_index, int array_size, int level) override;
+		RenderViewPtr Make2DDepthStencilRenderView(Texture& texture, int array_index, Texture::CubeFaces face, int level) override;
+		RenderViewPtr Make2DDepthStencilRenderView(Texture& texture, int array_index, uint32_t slice, int level) override;
+		RenderViewPtr MakeCubeDepthStencilRenderView(Texture& texture, int array_index, int level) override;
+		RenderViewPtr Make3DDepthStencilRenderView(Texture& texture, int array_index, uint32_t first_slice, uint32_t num_slices, int level) override;
+
+		UnorderedAccessViewPtr Make1DUnorderedAccessView(Texture& texture, int first_array_index, int array_size, int level) override;
+		UnorderedAccessViewPtr Make2DUnorderedAccessView(Texture& texture, int first_array_index, int array_size, int level);
+		UnorderedAccessViewPtr Make2DUnorderedAccessView(Texture& texture, int array_index, Texture::CubeFaces face, int level) override;
+		UnorderedAccessViewPtr Make2DUnorderedAccessView(Texture& texture, int array_index, uint32_t slice, int level) override;
+		UnorderedAccessViewPtr MakeCubeUnorderedAccessView(Texture& texture, int array_index, int level) override;
+		UnorderedAccessViewPtr Make3DUnorderedAccessView(Texture& texture, int array_index, uint32_t first_slice, uint32_t num_slices, int level) override;
+		UnorderedAccessViewPtr MakeGraphicsBufferUnorderedAccessView(GraphicsBuffer& gbuffer, ElementFormat pf) override;
+
+		ShaderObjectPtr MakeShaderObject() override;
+
+	private:
+		std::unique_ptr<RenderEngine> DoMakeRenderEngine() override;
+
+		RenderStateObjectPtr DoMakeRenderStateObject(RasterizerStateDesc const & rs_desc, DepthStencilStateDesc const & dss_desc,
+			BlendStateDesc const & bs_desc) override;
+		SamplerStateObjectPtr DoMakeSamplerStateObject(SamplerStateDesc const & desc) override;
+
+		virtual void DoSuspend() override;
+		virtual void DoResume() override;
+
+	private:
+		NullRenderFactory(NullRenderFactory const & rhs);
+		NullRenderFactory& operator=(NullRenderFactory const & rhs);
+	};
 }
 
 #endif			// KLAYGE_PLUGINS_NULL_RENDER_FACTORY_HPP

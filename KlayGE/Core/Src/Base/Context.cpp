@@ -34,37 +34,58 @@
 #include <KlayGE/ResLoader.hpp>
 #include <KFL/XMLDom.hpp>
 #include <KlayGE/DeferredRenderingLayer.hpp>
-#include <KFL/Thread.hpp>
 #include <KlayGE/PerfProfiler.hpp>
 #include <KlayGE/UI.hpp>
 #include <KFL/Hash.hpp>
 
 #include <fstream>
+#include <mutex>
 #include <sstream>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/algorithm/string/split.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
 #include <boost/algorithm/string/trim.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/lexical_cast.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
 
-#ifdef KLAYGE_PLATFORM_WINDOWS
+#if defined(KLAYGE_PLATFORM_WINDOWS)
 #include <windows.h>
 #if defined(KLAYGE_PLATFORM_WINDOWS_DESKTOP)
 #if (_WIN32_WINNT >= _WIN32_WINNT_WINBLUE)
 #include <VersionHelpers.h>
 #endif
 #endif
+#elif defined(KLAYGE_PLATFORM_ANDROID)
+#include <android_native_app_glue.h>
 #endif
 
 #if defined(KLAYGE_PLATFORM_ANDROID) || defined(KLAYGE_PLATFORM_IOS)
-#include <KlayGE/OpenGLES/OGLESRenderFactory.hpp>
-#include <KlayGE/OCTree/OCTreeFactory.hpp>
-#include <KlayGE/MsgInput/MInputFactory.hpp>
+	#define KLAYGE_STATIC_LINK_PLUGINS
+#endif
+
+#ifdef KLAYGE_STATIC_LINK_PLUGINS
+extern "C"
+{
+	void MakeRenderFactory(std::unique_ptr<KlayGE::RenderFactory>& ptr);
+	void MakeAudioFactory(std::unique_ptr<KlayGE::AudioFactory>& ptr);
+	void MakeInputFactory(std::unique_ptr<KlayGE::InputFactory>& ptr);
+	void MakeShowFactory(std::unique_ptr<KlayGE::ShowFactory>& ptr);
+	void MakeScriptFactory(std::unique_ptr<KlayGE::ScriptFactory>& ptr);
+	void MakeSceneManager(std::unique_ptr<KlayGE::SceneManager>& ptr);
+	void MakeAudioDataSourceFactory(std::unique_ptr<KlayGE::AudioDataSourceFactory>& ptr);
+}
 #endif
 
 #include <KlayGE/Context.hpp>
@@ -250,17 +271,17 @@ namespace KlayGE
 	{
 #if defined(KLAYGE_PLATFORM_WINDOWS_DESKTOP)
 		static char const * available_rfs_array[] = { "D3D11", "OpenGL", "OpenGLES", "D3D12" };
-		static char const * available_afs_array[] = { "OpenAL", "DSound", "XAudio" };
+		static char const * available_afs_array[] = { "OpenAL", "XAudio" };
 		static char const * available_adsfs_array[] = { "OggVorbis" };
 		static char const * available_ifs_array[] = { "MsgInput" };
-		static char const * available_sfs_array[] = { "DShow" };
-		static char const * available_scfs_array[] = { "Python", "NullScript" };
+		static char const * available_sfs_array[] = { "DShow", "MFShow" };
+		static char const * available_scfs_array[] = { "Python" };
 #elif defined(KLAYGE_PLATFORM_WINDOWS_STORE)
 		static char const * available_rfs_array[] = { "D3D11", "D3D12" };
 		static char const * available_afs_array[] = { "XAudio" };
 		static char const * available_adsfs_array[] = { "OggVorbis" };
 		static char const * available_ifs_array[] = { "MsgInput" };
-		static char const * available_sfs_array[] = { "NullShow" };
+		static char const * available_sfs_array[] = { "MFShow" };
 		static char const * available_scfs_array[] = { "Python" };
 #elif defined(KLAYGE_PLATFORM_LINUX)
 		static char const * available_rfs_array[] = { "OpenGL" };
@@ -520,8 +541,8 @@ namespace KlayGE
 			attr = stereo_node->Attrib("method");
 			if (attr)
 			{
-				std::string const & method_str = attr->ValueString();
-				size_t const method_str_hash = RT_HASH(method_str.c_str());
+				std::string_view const method_str = attr->ValueString();
+				size_t const method_str_hash = HashRange(method_str.begin(), method_str.end());
 				if (CT_HASH("none") == method_str_hash)
 				{
 					stereo_method = STM_None;
@@ -581,8 +602,8 @@ namespace KlayGE
 			attr = output_node->Attrib("method");
 			if (attr)
 			{
-				std::string const & method_str = attr->ValueString();
-				size_t const method_str_hash = RT_HASH(method_str.c_str());
+				std::string_view const method_str = attr->ValueString();
+				size_t const method_str_hash = HashRange(method_str.begin(), method_str.end());
 				if (CT_HASH("hdr10") == method_str_hash)
 				{
 					display_output_method = DOM_HDR10;
@@ -619,7 +640,7 @@ namespace KlayGE
 				attr = options_node->Attrib("str");
 				if (attr)
 				{
-					std::string const & options_str = attr->ValueString();
+					std::string_view const options_str = attr->ValueString();
 
 					std::vector<std::string> strs;
 					boost::algorithm::split(strs, options_str, boost::is_any_of(","));
@@ -954,7 +975,7 @@ namespace KlayGE
 	{
 		render_factory_.reset();
 
-#if !(defined(KLAYGE_PLATFORM_ANDROID) || defined(KLAYGE_PLATFORM_IOS))
+#ifndef KLAYGE_STATIC_LINK_PLUGINS
 		render_loader_.Free();
 
 		std::string render_path = ResLoader::Instance().Locate("Render");
@@ -982,6 +1003,8 @@ namespace KlayGE
 	void Context::LoadAudioFactory(std::string const & af_name)
 	{
 		audio_factory_.reset();
+
+#ifndef KLAYGE_STATIC_LINK_PLUGINS
 		audio_loader_.Free();
 
 		std::string audio_path = ResLoader::Instance().Locate("Audio");
@@ -1000,13 +1023,17 @@ namespace KlayGE
 			LogError("Loading %s failed", path.c_str());
 			audio_loader_.Free();
 		}
+#else
+		KFL_UNUSED(af_name);
+		MakeAudioFactory(audio_factory_);
+#endif
 	}
 
 	void Context::LoadInputFactory(std::string const & if_name)
 	{
 		input_factory_.reset();
 
-#if !(defined(KLAYGE_PLATFORM_ANDROID) || defined(KLAYGE_PLATFORM_IOS))
+#ifndef KLAYGE_STATIC_LINK_PLUGINS
 		input_loader_.Free();
 
 		std::string input_path = ResLoader::Instance().Locate("Input");
@@ -1034,6 +1061,8 @@ namespace KlayGE
 	void Context::LoadShowFactory(std::string const & sf_name)
 	{
 		show_factory_.reset();
+
+#ifndef KLAYGE_STATIC_LINK_PLUGINS
 		show_loader_.Free();
 
 		std::string show_path = ResLoader::Instance().Locate("Show");
@@ -1052,11 +1081,17 @@ namespace KlayGE
 			LogError("Loading %s failed", path.c_str());
 			show_loader_.Free();
 		}
+#else
+		KFL_UNUSED(sf_name);
+		MakeShowFactory(show_factory_);
+#endif
 	}
 
 	void Context::LoadScriptFactory(std::string const & sf_name)
 	{
 		script_factory_.reset();
+
+#ifndef KLAYGE_STATIC_LINK_PLUGINS
 		script_loader_.Free();
 
 		std::string script_path = ResLoader::Instance().Locate("Script");
@@ -1075,13 +1110,17 @@ namespace KlayGE
 			LogError("Loading %s failed", path.c_str());
 			script_loader_.Free();
 		}
+#else
+		KFL_UNUSED(sf_name);
+		MakeScriptFactory(script_factory_);
+#endif
 	}
 
 	void Context::LoadSceneManager(std::string const & sm_name)
 	{
 		scene_mgr_.reset();
 
-#if !(defined(KLAYGE_PLATFORM_ANDROID) || defined(KLAYGE_PLATFORM_IOS))
+#ifndef KLAYGE_STATIC_LINK_PLUGINS
 		sm_loader_.Free();
 
 		std::string sm_path = ResLoader::Instance().Locate("Scene");
@@ -1109,6 +1148,8 @@ namespace KlayGE
 	void Context::LoadAudioDataSourceFactory(std::string const & adsf_name)
 	{
 		audio_data_src_factory_.reset();
+
+#ifndef KLAYGE_STATIC_LINK_PLUGINS
 		ads_loader_.Free();
 
 		std::string adsf_path = ResLoader::Instance().Locate("Audio");
@@ -1127,6 +1168,10 @@ namespace KlayGE
 			LogError("Loading %s failed", path.c_str());
 			ads_loader_.Free();
 		}
+#else
+		KFL_UNUSED(adsf_name);
+		MakeAudioDataSourceFactory(audio_data_src_factory_);
+#endif
 	}
 
 	SceneManager& Context::SceneManagerInstance()

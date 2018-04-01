@@ -34,31 +34,6 @@
 
 namespace KlayGE
 {
-	template Matrix4_T<float>::Matrix4_T(float const * rhs) noexcept;
-	template Matrix4_T<float>::Matrix4_T(float4x4 const & rhs) noexcept;
-	template Matrix4_T<float>::Matrix4_T(float4x4&& rhs) noexcept;
-	template Matrix4_T<float>::Matrix4_T(float f11, float f12, float f13, float f14,
-		float f21, float f22, float f23, float f24,
-		float f31, float f32, float f33, float f34,
-		float f41, float f42, float f43, float f44) noexcept;
-	template float4x4 const & Matrix4_T<float>::Zero() noexcept;
-	template float4x4 const & Matrix4_T<float>::Identity() noexcept;
-	template void Matrix4_T<float>::Row(size_t index, float4 const & rhs) noexcept;
-	template float4 const & Matrix4_T<float>::Row(size_t index) const noexcept;
-	template void Matrix4_T<float>::Col(size_t index, float4 const & rhs) noexcept;
-	template float4 const Matrix4_T<float>::Col(size_t index) const noexcept;
-	template float4x4& Matrix4_T<float>::operator+=(float4x4 const & rhs) noexcept;
-	template float4x4& Matrix4_T<float>::operator-=(float4x4 const & rhs) noexcept;
-	template float4x4& Matrix4_T<float>::operator*=(float4x4 const & rhs) noexcept;
-	template float4x4& Matrix4_T<float>::operator*=(float rhs) noexcept;
-	template float4x4& Matrix4_T<float>::operator/=(float rhs) noexcept;
-	template float4x4& Matrix4_T<float>::operator=(float4x4 const & rhs) noexcept;
-	template float4x4& Matrix4_T<float>::operator=(float4x4&& rhs) noexcept;
-	template float4x4 const Matrix4_T<float>::operator+() const noexcept;
-	template float4x4 const Matrix4_T<float>::operator-() const noexcept;
-	template bool Matrix4_T<float>::operator==(float4x4 const & rhs) const noexcept;
-
-
 	template <typename T>
 	Matrix4_T<T>::Matrix4_T(T const * rhs) noexcept
 	{
@@ -68,7 +43,7 @@ namespace KlayGE
 			rhs += col_num;
 		}
 	}
-	
+
 	template <typename T>
 	Matrix4_T<T>::Matrix4_T(Matrix4_T const & rhs) noexcept
 		: m_(rhs.m_)
@@ -80,7 +55,7 @@ namespace KlayGE
 		: m_(std::move(rhs.m_))
 	{
 	}
-	
+
 	template <typename T>
 	Matrix4_T<T>::Matrix4_T(T f11, T f12, T f13, T f14,
 		T f21, T f22, T f23, T f24,
@@ -120,13 +95,13 @@ namespace KlayGE
 	{
 		m_[index] = rhs;
 	}
-	
+
 	template <typename T>
 	Vector_T<T, 4> const & Matrix4_T<T>::Row(size_t index) const noexcept
 	{
 		return m_[index];
 	}
-	
+
 	template <typename T>
 	void Matrix4_T<T>::Col(size_t index, Vector_T<T, row_num> const & rhs) noexcept
 	{
@@ -135,7 +110,7 @@ namespace KlayGE
 			m_[i][index] = rhs[i];
 		}
 	}
-	
+
 	template <typename T>
 	Vector_T<T, 4> const Matrix4_T<T>::Col(size_t index) const noexcept
 	{
@@ -153,21 +128,21 @@ namespace KlayGE
 		m_ += rhs.m_;
 		return *this;
 	}
-	
+
 	template <typename T>
 	Matrix4_T<T>& Matrix4_T<T>::operator-=(Matrix4_T<T> const & rhs) noexcept
 	{
 		m_ -= rhs.m_;
 		return *this;
 	}
-	
+
 	template <typename T>
 	Matrix4_T<T>& Matrix4_T<T>::operator*=(Matrix4_T<T> const & rhs) noexcept
 	{
 		*this = MathLib::mul(*this, rhs);
 		return *this;
 	}
-	
+
 	template <typename T>
 	Matrix4_T<T>& Matrix4_T<T>::operator*=(T rhs) noexcept
 	{
@@ -177,7 +152,7 @@ namespace KlayGE
 		}
 		return *this;
 	}
-	
+
 	template <typename T>
 	Matrix4_T<T>& Matrix4_T<T>::operator/=(T rhs) noexcept
 	{
@@ -206,7 +181,7 @@ namespace KlayGE
 	{
 		return *this;
 	}
-	
+
 	template <typename T>
 	Matrix4_T<T> const Matrix4_T<T>::operator-() const noexcept
 	{
@@ -220,4 +195,7 @@ namespace KlayGE
 	{
 		return m_ == rhs.m_;
 	}
+
+
+	template class Matrix4_T<float>;
 }

@@ -34,7 +34,6 @@
 #include <KlayGE/RenderFactory.hpp>
 #include <KFL/Color.hpp>
 #include <KlayGE/Texture.hpp>
-#include <KFL/Thread.hpp>
 
 #include <vector>
 #include <cstring>
@@ -46,8 +45,6 @@
 namespace
 {
 	using namespace KlayGE;
-
-	std::mutex singleton_mutex;
 
 	static uint8_t const selector_index_to_etc1[] = { 3, 2, 0, 1 };
 
@@ -1091,6 +1088,9 @@ namespace KlayGE
 #ifdef KLAYGE_DEBUG
 		uint32_t const limit = diff ? 32 : 16;
 		BOOST_ASSERT((diff < 2) && (inten < 8) && (selector < 4) && (packed_c < limit));
+#if defined(KLAYGE_COMPILER_CLANGC2)
+		KFL_UNUSED(limit);
+#endif
 #endif
 		int c;
 		if (diff)
@@ -1110,8 +1110,6 @@ namespace KlayGE
 	// For random 888 inputs, MSE results are better than Erricson's ETC1 packer in "slow" mode ~9.5% of the time, is slightly worse only ~.01% of the time, and is equal the rest of the time.
 	uint64_t TexCompressionETC1::PackETC1UniformBlock(ETC1Block& block, ARGBColor32 const * argb) const
 	{
-		BOOST_ASSERT(ETC1_INVERSE_LOOKUP[0][255]);
-
 		static uint32_t const next_comp[] = { 1, 2, 0, 1 };
 
 		uint8_t const * color = reinterpret_cast<uint8_t const *>(argb);
@@ -1157,6 +1155,12 @@ namespace KlayGE
 						uint32_t selector = (x >> 4) & 3;
 						uint32_t p0 = (x >> 8) & 255;
 						BOOST_ASSERT(ETC1DecodeValue(diff, inten, selector, p0) == static_cast<uint32_t>(c_plus_delta));
+#if defined(KLAYGE_COMPILER_CLANGC2)
+						KFL_UNUSED(diff);
+						KFL_UNUSED(inten);
+						KFL_UNUSED(selector);
+						KFL_UNUSED(p0);
+#endif
 					}
 #endif
 
@@ -1214,8 +1218,6 @@ namespace KlayGE
 	uint32_t TexCompressionETC1::PackETC1UniformPartition(Results& results, uint32_t num_colors, ARGBColor32 const * argb,
 			bool use_diff, ARGBColor32 const * base_color5_unscaled) const
 	{
-		BOOST_ASSERT(ETC1_INVERSE_LOOKUP[0][255]);
-
 		static uint32_t const next_comp[] = { 1, 2, 0, 1 };
 
 		uint8_t const * color = reinterpret_cast<uint8_t const *>(argb);
@@ -1283,6 +1285,11 @@ namespace KlayGE
 						uint32_t const selector = (x >> 4) & 3;
 						uint32_t const p0 = (x >> 8) & 0xFF;
 						BOOST_ASSERT(ETC1DecodeValue(diff, inten, selector, p0) == static_cast<uint32_t>(c_plus_delta));
+#if defined(KLAYGE_COMPILER_CLANGC2)
+						KFL_UNUSED(inten);
+						KFL_UNUSED(selector);
+						KFL_UNUSED(p0);
+#endif
 					}
 #endif
 

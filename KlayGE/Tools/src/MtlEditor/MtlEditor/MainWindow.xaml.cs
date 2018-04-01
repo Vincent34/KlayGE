@@ -266,6 +266,7 @@ namespace MtlEditor
 			skeleton.IsEnabled = false;
 			play.IsEnabled = false;
 			visualize.IsEnabled = false;
+			lod.IsEnabled = false;
 			frame_text.IsEnabled = false;
 			frame_slider.IsEnabled = false;
 
@@ -366,12 +367,32 @@ namespace MtlEditor
 			}
 			frame_slider.Value = 0;
 			visualize.IsEnabled = true;
+			lod.IsEnabled = true;
 			properties.IsEnabled = true;
 			// Workround for.NET 4.6.1
 			visualize_gallery.Command = ApplicationCommands.Print;
 			visualize_gallery.Command = null;
+			lod_gallery.Command = ApplicationCommands.Print;
+			lod_gallery.Command = null;
 
 			frame_ = 0;
+
+			lods_items.Items.Clear();
+			{
+				var item = new RibbonGalleryItem();
+				item.Content = "Auto";
+				item.DataContext = "-1";
+				lods_items.Items.Add(item);
+			}
+			uint lods = core_.NumLods();
+			for (uint i = 0; i < lods; ++ i)
+			{
+				var item = new RibbonGalleryItem();
+				item.Content = i.ToString();
+				item.DataContext = i.ToString();
+				lods_items.Items.Add(item);
+			}
+			lod_gallery.SelectedItem = lods_items.Items[1];
 
 			meshes_[0].Children.Clear();
 			materials_[0].Children.Clear();
@@ -631,6 +652,15 @@ namespace MtlEditor
 			{
 				System.Windows.Controls.Ribbon.RibbonGalleryItem item = e.NewValue as System.Windows.Controls.Ribbon.RibbonGalleryItem;
 				core_.Visualize(Int32.Parse((string)item.DataContext));
+			}
+		}
+
+		private void LodSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+		{
+			if (core_ != null)
+			{
+				System.Windows.Controls.Ribbon.RibbonGalleryItem item = e.NewValue as System.Windows.Controls.Ribbon.RibbonGalleryItem;
+				core_.ActiveLod(Int32.Parse((string)item.DataContext));
 			}
 		}
 

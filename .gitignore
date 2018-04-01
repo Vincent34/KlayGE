@@ -10,7 +10,7 @@
 *.gch
 KlayGE.log
 __pycache__
-cfg_build.py
+CfgBuild.py
 *_mgw*_*_*
 *_gcc*_*_*
 *_vc*_*_*
@@ -29,6 +29,7 @@ glloader/src/glloader_gl.c
 glloader/src/glloader_gles.c
 glloader/src/glloader_glx.c
 glloader/src/glloader_wgl.c
+KlayGE/bin/*/*.apk
 KlayGE/bin/*/*/*.dll
 KlayGE/bin/*/*/*.so
 KlayGE/bin/*/*/*.dylib

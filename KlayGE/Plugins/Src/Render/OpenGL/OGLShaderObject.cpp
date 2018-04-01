@@ -27,8 +27,9 @@
 #include <KlayGE/Context.hpp>
 #include <KFL/Math.hpp>
 #include <KFL/Matrix.hpp>
-#include <KlayGE/RenderEngine.hpp>
 #include <KlayGE/RenderEffect.hpp>
+#include <KlayGE/RenderEngine.hpp>
+#include <KlayGE/RenderFactory.hpp>
 #include <KFL/Hash.hpp>
 
 #include <cstdio>
@@ -37,7 +38,14 @@
 #include <sstream>
 #include <cstring>
 #include <boost/assert.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
+#endif
 #include <boost/lexical_cast.hpp>
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
+#endif
 
 #include <glloader/glloader.h>
 
@@ -54,7 +62,6 @@
 #endif
 
 #include <KlayGE/OpenGL/OGLRenderFactory.hpp>
-#include <KlayGE/OpenGL/OGLRenderFactoryInternal.hpp>
 #include <KlayGE/OpenGL/OGLRenderEngine.hpp>
 #include <KlayGE/OpenGL/OGLMapping.hpp>
 #include <KlayGE/OpenGL/OGLTexture.hpp>
@@ -1218,32 +1225,34 @@ namespace KlayGE
 		{
 			is_shader_validate_[type] = false;
 		}
-
-		glShaderSource(object, 1, &glsl, nullptr);
-
-		glCompileShader(object);
-
-		GLint compiled = false;
-		glGetShaderiv(object, GL_COMPILE_STATUS, &compiled);
-		if (!compiled)
+		else
 		{
-			LogError("Error when compiling GLSL %s:", so_template_->shader_func_names_[type].c_str());
+			glShaderSource(object, 1, &glsl, nullptr);
 
-			GLint len = 0;
-			glGetShaderiv(object, GL_INFO_LOG_LENGTH, &len);
-			if (len > 0)
+			glCompileShader(object);
+
+			GLint compiled = false;
+			glGetShaderiv(object, GL_COMPILE_STATUS, &compiled);
+			if (!compiled)
 			{
-				std::vector<char> info(len + 1, 0);
-				glGetShaderInfoLog(object, len, &len, &info[0]);
-				this->PrintGLSLError(static_cast<ShaderType>(type), &info[0]);
+				LogError("Error when compiling GLSL %s:", so_template_->shader_func_names_[type].c_str());
+
+				GLint len = 0;
+				glGetShaderiv(object, GL_INFO_LOG_LENGTH, &len);
+				if (len > 0)
+				{
+					std::vector<char> info(len + 1, 0);
+					glGetShaderInfoLog(object, len, &len, &info[0]);
+					this->PrintGLSLError(static_cast<ShaderType>(type), &info[0]);
+				}
+
+				is_shader_validate_[type] = false;
 			}
+
+			glAttachShader(glsl_program_, object);
+
+			glDeleteShader(object);
 		}
-
-		is_shader_validate_[type] &= compiled ? true : false;
-
-		glAttachShader(glsl_program_, object);
-
-		glDeleteShader(object);
 	}
 
 	void OGLShaderObject::LinkGLSL()

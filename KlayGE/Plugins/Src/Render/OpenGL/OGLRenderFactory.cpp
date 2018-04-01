@@ -26,7 +26,6 @@
 #include <KlayGE/OpenGL/OGLFence.hpp>
 
 #include <KlayGE/OpenGL/OGLRenderFactory.hpp>
-#include <KlayGE/OpenGL/OGLRenderFactoryInternal.hpp>
 
 namespace KlayGE
 {
@@ -254,7 +253,10 @@ namespace KlayGE
 	}
 }
 
-void MakeRenderFactory(std::unique_ptr<KlayGE::RenderFactory>& ptr)
+extern "C"
 {
-	ptr = KlayGE::MakeUniquePtr<KlayGE::OGLRenderFactory>();
+	KLAYGE_SYMBOL_EXPORT void MakeRenderFactory(std::unique_ptr<KlayGE::RenderFactory>& ptr)
+	{
+		ptr = KlayGE::MakeUniquePtr<KlayGE::OGLRenderFactory>();
+	}
 }

@@ -16,13 +16,13 @@
 #include <cstring>
 #include <atomic>
 
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable" // Ignore unused variable (mpl_assertion_in_line_xxx) in boost
 #endif
 #include <boost/program_options.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
+#if defined(KLAYGE_COMPILER_CLANGC2)
+#pragma clang diagnostic pop
 #endif
 
 #include <ft2build.h>
@@ -456,7 +456,7 @@ void quantizer(std::vector<uint8_t>& lzma_dist, uint32_t non_empty_chars,
 		param.char_size_sq = char_size_sq;
 		param.s = s;
 		param.e = e;
-		joiners[i] = tp(std::bind(quantizer_chars, std::ref(lzma_dists[i]), std::ref(mses[i]), param));
+		joiners[i] = tp([&lzma_dists, &mses, param, i] { quantizer_chars(lzma_dists[i], mses[i], param); });
 	}
 
 	float mse = 0;

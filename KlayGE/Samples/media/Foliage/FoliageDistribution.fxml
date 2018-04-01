@@ -1,0 +1,253 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="Quaternion.fxml"/>
+
+	<parameter type="uint4" name="num_tile_plants"/>
+	<parameter type="uint2" name="tile_addr_offset_width"/>
+	<parameter type="float" name="foliage_tile_size"/>
+	<parameter type="float" name="half_num_tiles_edge"/>
+	<parameter type="float4" name="plant_spacing"/>
+	<parameter type="float2" name="impostor_dist"/>
+	<parameter type="float2" name="foliage_world_uv_repeats"/>
+	<parameter type="float3" name="foliage_texture_world_offset"/>
+	<parameter type="float" name="foliage_vertical_scale"/>
+	<parameter type="float4x4" name="model_mat"/>
+	<parameter type="float3" name="plant_aabb_min"/>
+	<parameter type="float3" name="plant_aabb_max"/>
+	<parameter type="float4" name="view_frustum_planes" array_size="6"/>
+	<parameter type="uint" name="probability_channel"/>
+	<parameter type="float4" name="center_tc_angles_step"/>
+	<parameter type="int" name="lod"/>
+	<parameter type="int" name="num_lods"/>
+	<parameter type="float3" name="eye_pos"/>
+	<parameter type="float" name="fov_scale"/>
+
+	<parameter type="texture2D" name="height_map_tex"/>
+	<parameter type="texture2D" name="probability_tex">
+		<annotation type="string" name="SasResourceAddress" value="probability.dds"/>
+	</parameter>
+	<parameter type="texture2D" name="noise_tex">
+		<annotation type="string" name="SasResourceAddress" value="white_noise_tex.dds"/>
+	</parameter>
+
+	<parameter type="sampler" name="linear_wrap_sampler">
+		<state name="filtering" value="min_mag_mip_linear"/>
+		<state name="address_u" value="wrap"/>
+		<state name="address_v" value="wrap"/>
+	</parameter>
+
+	<shader>
+		<![CDATA[
+static const float PI = 3.1415926f;
+
+void TransformAABB(inout float3 aabb_min, inout float3 aabb_max, float3 scale, float4 rot, float3 trans)
+{
+	float3 corners[] = 
+	{
+		float3(aabb_min.x, aabb_min.y, aabb_min.z),
+		float3(aabb_max.x, aabb_min.y, aabb_min.z),
+		float3(aabb_min.x, aabb_max.y, aabb_min.z),
+		float3(aabb_max.x, aabb_max.y, aabb_min.z),
+		float3(aabb_min.x, aabb_min.y, aabb_max.z),
+		float3(aabb_max.x, aabb_min.y, aabb_max.z),
+		float3(aabb_min.x, aabb_max.y, aabb_max.z),
+		float3(aabb_max.x, aabb_max.y, aabb_max.z)
+	};
+			
+	aabb_min = aabb_max = transform_quat(corners[0] * scale, rot) + trans;
+	for (int j = 1; j < 8; ++ j)
+	{
+		float3 vec = transform_quat(corners[j] * scale, rot) + trans;
+		aabb_min = min(aabb_min, vec);
+		aabb_max = max(aabb_max, vec);
+	}
+}
+
+int IntersectAABBFrustum(float3 aabb_min, float3 aabb_max, float4 view_frustum_planes[6])
+{
+	bool intersect = false;
+	for (int i = 0; i < 6; ++ i)
+	{
+		float4 plane = view_frustum_planes[i];
+
+		// v1 is diagonally opposed to v0
+		float3 v0 = float3((plane.x < 0) ? aabb_min.x : aabb_max.x, (plane.y < 0) ? aabb_min.y : aabb_max.y, (plane.z < 0) ? aabb_min.z : aabb_max.z);
+		float3 v1 = float3((plane.x < 0) ? aabb_max.x : aabb_min.x, (plane.y < 0) ? aabb_max.y : aabb_min.y, (plane.z < 0) ? aabb_max.z : aabb_min.z);
+
+		if (dot(plane, float4(v0, 1)) < 0)
+		{
+			return 1;
+		}
+		if (dot(plane, float4(v1, 1)) < 0)
+		{
+			intersect = true;
+		}
+	}
+
+	return intersect ? 2 : 0;
+}
+
+float OrthoArea(float3 view_dir, float3 aabb_min, float3 aabb_max)
+{
+	float3 size = aabb_max - aabb_min;
+	return dot(abs(view_dir), size.yzx * size.zxy);
+}
+
+float CalcLod(float3 aabb_min, float3 aabb_max, float3 eye_pos, float fov_scale)
+{
+	float3 view_dir = (aabb_min + aabb_max) / 2 - eye_pos;
+	float dist_sq = dot(view_dir, view_dir);
+	view_dir *= rsqrt(dist_sq);
+	float area = OrthoArea(view_dir, aabb_min, aabb_max);
+	return dist_sq / area / fov_scale;
+}
+
+void FoliageDistribution(uint vid, bool is_impostor,
+					out float4 out_pos_scale,
+					out float2 out_rotation)
+{
+	out_pos_scale = -1;
+	out_rotation = -1;
+	
+	uint tile_index = vid / num_tile_plants.x;
+	uint plant_index = vid - tile_index * num_tile_plants.x;
+	
+	uint iv = plant_index / num_tile_plants.z;
+	uint iu = plant_index - iv * num_tile_plants.z;
+	float2 tile_uv = float2(iu, iv) / (num_tile_plants.yz - 1);
+
+	uint2 tile_xy;
+	tile_xy.y = tile_index / tile_addr_offset_width.y;
+	tile_xy.x = tile_index - tile_xy.y * tile_addr_offset_width.y;
+	tile_xy += tile_addr_offset_width.x;
+
+	float3 displaced_pos;
+	displaced_pos.xz = (tile_xy - half_num_tiles_edge + tile_uv) * foliage_tile_size
+		+ (float2(noise_tex.SampleLevel(linear_wrap_sampler, tile_uv * 13 / 256, 0).x,
+				noise_tex.SampleLevel(linear_wrap_sampler, tile_uv * 23 / 256, 0).x) - 0.5f) * plant_spacing.xy;
+	displaced_pos.y = 0;
+
+	float2 global_uv = displaced_pos.xz + 2 * foliage_texture_world_offset.xz;
+
+	float2 probobility_uv = global_uv + float2(noise_tex.SampleLevel(linear_wrap_sampler, global_uv * 7, 0).x,
+		noise_tex.SampleLevel(linear_wrap_sampler, global_uv * 5, 0).x) - 0.5f;
+	float probability = probability_tex.SampleLevel(linear_wrap_sampler, probobility_uv, 0)[probability_channel];
+	bool foliage_planted = (probability >= noise_tex.SampleLevel(linear_wrap_sampler, global_uv * 3, 0).x);
+
+	float3 world_displaced_pos = mul(float4(displaced_pos, 1), model_mat).xyz;
+	float2 dist = world_displaced_pos.xz - eye_pos.xz;
+	float dist_sq = dot(dist, dist);
+
+	bool in_dist = false;
+	if (((impostor_dist.y >= 0) && (dist_sq < impostor_dist.y)) || (impostor_dist.y < 0))
+	{
+		if (is_impostor)
+		{
+			if (dist_sq >= impostor_dist.x)
+			{
+				in_dist = true;
+			}
+		}
+		else
+		{
+			if (dist_sq < impostor_dist.x)
+			{
+				in_dist = true;
+			}
+		}
+	}
+	
+	if (foliage_planted && in_dist)
+	{
+		float2 height_uv = displaced_pos.xz * foliage_world_uv_repeats.y * 0.5f + 0.5f;
+		float height = height_map_tex.SampleLevel(linear_wrap_sampler, height_uv, 0).x * foliage_vertical_scale;
+
+		displaced_pos = world_displaced_pos + height * model_mat[1].xyz;
+
+		float scale = noise_tex.SampleLevel(linear_wrap_sampler, global_uv * 17, 0).x * 1.7f + 0.3f;
+		float angle = noise_tex.SampleLevel(linear_wrap_sampler, global_uv * 39, 0).x * PI;
+		float4 rot_quat = axis_angle_to_quat(float3(0, 1, 0), angle);
+
+		float3 aabb_min = plant_aabb_min;
+		float3 aabb_max = plant_aabb_max;
+		TransformAABB(aabb_min, aabb_max, scale, rot_quat, displaced_pos);
+
+		if ((is_impostor || (lod == clamp((int)(CalcLod(aabb_min, aabb_max, eye_pos, fov_scale) + 0.5f), 0, num_lods - 1)))
+			&& (IntersectAABBFrustum(aabb_min, aabb_max, view_frustum_planes) != 1))
+		{
+			out_pos_scale = float4(displaced_pos, scale);
+
+			if (is_impostor)
+			{
+				out_rotation = center_tc_angles_step.xy;
+				out_rotation.x += floor(angle * center_tc_angles_step.z + 0.5f) * center_tc_angles_step.w;
+			}
+			else
+			{
+				out_rotation = rot_quat.yw;
+				if (rot_quat.w < 0)
+				{
+					out_rotation = -out_rotation;
+				}
+			}
+		}
+	}
+}
+
+void FoliageDistributionVS(uint vid : SV_VertexID,
+					out float4 out_pos_scale : TEXCOORD1,
+					out float2 out_rotation : TEXCOORD2)
+{
+	FoliageDistribution(vid, false, out_pos_scale, out_rotation);
+}
+
+void FoliageImpostorDistributionVS(uint vid : SV_VertexID,
+					out float4 out_pos_scale : TEXCOORD1,
+					out float2 out_rotation : TEXCOORD2)
+{
+	FoliageDistribution(vid, true, out_pos_scale, out_rotation);
+}
+
+struct FoliageDistGSOut
+{
+	float4 pos_scale : TEXCOORD1;
+	float2 rotation : TEXCOORD2;
+};
+
+[maxvertexcount(1)]
+void FoliageDistributionGS(point float4 in_pos_scale[1] : TEXCOORD1, point float2 in_rotation[1] : TEXCOORD2,
+		inout PointStream<FoliageDistGSOut> out_stream)
+{
+	if (in_pos_scale[0].w > 0)
+	{
+		FoliageDistGSOut gs_out;
+		gs_out.pos_scale = in_pos_scale[0];
+		gs_out.rotation = in_rotation[0];
+		out_stream.Append(gs_out);
+	}
+}
+		]]>
+	</shader>
+
+	<technique name="FoliageDistribution">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="FoliageDistributionVS()"/>
+			<state name="geometry_shader" value="FoliageDistributionGS()">
+				<stream_output>
+					<entry usage="TEXCOORD" usage_index="1" component="xyzw" slot="0"/>
+					<entry usage="TEXCOORD" usage_index="2" component="xy" slot="0"/>
+				</stream_output>
+			</state>
+		</pass>
+	</technique>
+
+	<technique name="FoliageImpostorDistribution" inherit="FoliageDistribution">
+		<pass name="p0">
+			<state name="vertex_shader" value="FoliageImpostorDistributionVS()"/>
+		</pass>
+	</technique>
+</effect>

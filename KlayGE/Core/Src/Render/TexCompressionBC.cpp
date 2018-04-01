@@ -35,7 +35,6 @@
 #include <KlayGE/RenderFactory.hpp>
 #include <KFL/Color.hpp>
 #include <KlayGE/Texture.hpp>
-#include <KFL/Thread.hpp>
 #include <KFL/Half.hpp>
 
 #include <vector>
@@ -51,8 +50,6 @@
 namespace
 {
 	using namespace KlayGE;
-
-	std::mutex singleton_mutex;
 
 	static int const BC67_PREC_WEIGHTS[][16] =
 	{

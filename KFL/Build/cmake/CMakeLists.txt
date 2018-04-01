@@ -27,30 +27,32 @@ SET(KFL_OUTPUT_DIR "${KFL_PROJECT_DIR}/lib/${KLAYGE_PLATFORM_NAME}")
 
 SET(LIB_NAME KFL)
 
-SET(KERNEL_DETAIL_HEADER_FILES
+SET(BASE_DETAIL_HEADER_FILES
 	${KFL_PROJECT_DIR}/include/KFL/Detail/AutoLink.hpp
 )
-SET(KERNEL_CXX17_HEADER_FILES
+SET(BASE_CXX17_HEADER_FILES
 	${KFL_PROJECT_DIR}/include/KFL/CXX17/any.hpp
 	${KFL_PROJECT_DIR}/include/KFL/CXX17/filesystem.hpp
 	${KFL_PROJECT_DIR}/include/KFL/CXX17/iterator.hpp
 	${KFL_PROJECT_DIR}/include/KFL/CXX17/optional.hpp
 	${KFL_PROJECT_DIR}/include/KFL/CXX17/string_view.hpp
 )
-SET(KERNEL_HEADER_FILES
+SET(BASE_HEADER_FILES
 	${KFL_PROJECT_DIR}/include/KFL/AlignedAllocator.hpp
+	${KFL_PROJECT_DIR}/include/KFL/Architecture.hpp
 	${KFL_PROJECT_DIR}/include/KFL/ArrayRef.hpp
 	${KFL_PROJECT_DIR}/include/KFL/COMPtr.hpp
+	${KFL_PROJECT_DIR}/include/KFL/Compiler.hpp
 	${KFL_PROJECT_DIR}/include/KFL/Config.hpp
 	${KFL_PROJECT_DIR}/include/KFL/CpuInfo.hpp
 	${KFL_PROJECT_DIR}/include/KFL/CustomizedStreamBuf.hpp
-	${KFL_PROJECT_DIR}/include/KFL/CXX11.hpp
 	${KFL_PROJECT_DIR}/include/KFL/CXX17.hpp
 	${KFL_PROJECT_DIR}/include/KFL/DllLoader.hpp
 	${KFL_PROJECT_DIR}/include/KFL/ErrorHandling.hpp
 	${KFL_PROJECT_DIR}/include/KFL/Hash.hpp
 	${KFL_PROJECT_DIR}/include/KFL/KFL.hpp
 	${KFL_PROJECT_DIR}/include/KFL/Log.hpp
+	${KFL_PROJECT_DIR}/include/KFL/Platform.hpp
 	${KFL_PROJECT_DIR}/include/KFL/PreDeclare.hpp
 	${KFL_PROJECT_DIR}/include/KFL/ResIdentifier.hpp
 	${KFL_PROJECT_DIR}/include/KFL/Thread.hpp
@@ -60,17 +62,17 @@ SET(KERNEL_HEADER_FILES
 	${KFL_PROJECT_DIR}/include/KFL/Util.hpp
 	${KFL_PROJECT_DIR}/include/KFL/XMLDom.hpp
 )
-SET(KERNEL_SOURCE_FILES
-	${KFL_PROJECT_DIR}/src/Kernel/CpuInfo.cpp
-	${KFL_PROJECT_DIR}/src/Kernel/CustomizedStreamBuf.cpp
-	${KFL_PROJECT_DIR}/src/Kernel/DllLoader.cpp
-	${KFL_PROJECT_DIR}/src/Kernel/ErrorHandling.cpp
-	${KFL_PROJECT_DIR}/src/Kernel/KFL.cpp
-	${KFL_PROJECT_DIR}/src/Kernel/Log.cpp
-	${KFL_PROJECT_DIR}/src/Kernel/Thread.cpp
-	${KFL_PROJECT_DIR}/src/Kernel/Timer.cpp
-	${KFL_PROJECT_DIR}/src/Kernel/Util.cpp
-	${KFL_PROJECT_DIR}/src/Kernel/XMLDom.cpp
+SET(BASE_SOURCE_FILES
+	${KFL_PROJECT_DIR}/src/Base/CpuInfo.cpp
+	${KFL_PROJECT_DIR}/src/Base/CustomizedStreamBuf.cpp
+	${KFL_PROJECT_DIR}/src/Base/DllLoader.cpp
+	${KFL_PROJECT_DIR}/src/Base/ErrorHandling.cpp
+	${KFL_PROJECT_DIR}/src/Base/KFL.cpp
+	${KFL_PROJECT_DIR}/src/Base/Log.cpp
+	${KFL_PROJECT_DIR}/src/Base/Thread.cpp
+	${KFL_PROJECT_DIR}/src/Base/Timer.cpp
+	${KFL_PROJECT_DIR}/src/Base/Util.cpp
+	${KFL_PROJECT_DIR}/src/Base/XMLDom.cpp
 )
 
 SET(MATH_HEADER_FILES
@@ -113,10 +115,10 @@ SET(MATH_SOURCE_FILES
 	${KFL_PROJECT_DIR}/src/Math/Sphere.cpp
 )
 
-SOURCE_GROUP("Kernel\\Source Files" FILES ${KERNEL_SOURCE_FILES})
-SOURCE_GROUP("Kernel\\Header Files" FILES ${KERNEL_HEADER_FILES})
-SOURCE_GROUP("Kernel\\Header Files\\Detail" FILES ${KERNEL_DETAIL_HEADER_FILES})
-SOURCE_GROUP("Kernel\\Header Files\\CXX17" FILES ${KERNEL_CXX17_HEADER_FILES})
+SOURCE_GROUP("Base\\Source Files" FILES ${BASE_SOURCE_FILES})
+SOURCE_GROUP("Base\\Header Files" FILES ${BASE_HEADER_FILES})
+SOURCE_GROUP("Base\\Header Files\\Detail" FILES ${BASE_DETAIL_HEADER_FILES})
+SOURCE_GROUP("Base\\Header Files\\CXX17" FILES ${BASE_CXX17_HEADER_FILES})
 SOURCE_GROUP("Math\\Source Files" FILES ${MATH_SOURCE_FILES})
 SOURCE_GROUP("Math\\Header Files" FILES ${MATH_HEADER_FILES})
 
@@ -125,9 +127,8 @@ ADD_DEFINITIONS(-DKFL_SOURCE)
 INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
 INCLUDE_DIRECTORIES(${KFL_PROJECT_DIR}/../External/rapidxml)
 INCLUDE_DIRECTORIES(${KFL_PROJECT_DIR}/include)
-LINK_DIRECTORIES(${Boost_LIBRARY_DIR})
 ADD_LIBRARY(${LIB_NAME} STATIC
-	${KERNEL_SOURCE_FILES} ${KERNEL_HEADER_FILES} ${KERNEL_DETAIL_HEADER_FILES} ${KERNEL_CXX17_HEADER_FILES}
+	${BASE_SOURCE_FILES} ${BASE_HEADER_FILES} ${BASE_DETAIL_HEADER_FILES} ${BASE_CXX17_HEADER_FILES}
 	${MATH_SOURCE_FILES} ${MATH_HEADER_FILES}
 )
 
@@ -144,6 +145,6 @@ SET_TARGET_PROPERTIES(${LIB_NAME} PROPERTIES
 	OUTPUT_NAME ${LIB_OUTPUT_NAME}
 )
 
-ADD_PRECOMPILED_HEADER(${LIB_NAME} "KFL/KFL.hpp" "${KFL_PROJECT_DIR}/include" "${KFL_PROJECT_DIR}/src/Kernel/KFL.cpp")
+ADD_PRECOMPILED_HEADER(${LIB_NAME} "KFL/KFL.hpp" "${KFL_PROJECT_DIR}/include" "${KFL_PROJECT_DIR}/src/Base/KFL.cpp")
 
 TARGET_LINK_LIBRARIES(${LIB_NAME})
